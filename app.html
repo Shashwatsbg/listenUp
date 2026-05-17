@@ -3,69 +3,248 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>listenUp - Audio News</title>
+    <title>ListenUp - Premium AI Audio Workspace</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Google Fonts for readable typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header role="banner">
-        <h1>listenUp</h1>
-        <p class="subtitle" aria-live="polite">Daily AI curated news, accessible to everyone.</p>
-    </header>
-
-    <main role="main">
-        <section aria-label="Controls" class="controls-panel">
-            <button id="btn-prev" aria-label="Previous Article">
-                <span class="icon" aria-hidden="true">⏮</span> Previous
-            </button>
-            <button id="btn-play-pause" aria-label="Play News" class="primary-btn">
-                <span class="icon" aria-hidden="true" id="play-pause-icon">▶</span> <span id="play-pause-text">Play</span>
-            </button>
-            <button id="btn-next" aria-label="Next Article">
-                <span class="icon" aria-hidden="true">⏭</span> Next
-            </button>
-            <button id="btn-stop" aria-label="Stop Reading" class="danger-btn">
-                <span class="icon" aria-hidden="true">⏹</span> Stop
-            </button>
-        </section>
-
-        <section aria-label="Refresh Timer" class="timer-panel" tabindex="0">
-            <h2 id="timer-text" aria-live="polite" aria-atomic="true">Next update in 05:00</h2>
-        </section>
-
-        <section aria-label="Current Article" class="article-display" id="article-display">
-            <h2 id="article-title" aria-live="polite">Ready to Read</h2>
-            <p id="article-content" aria-live="polite">Press Play to start reading your daily news feed.</p>
-            <div class="status-bar">
-                <p id="status-text" aria-live="assertive">Status: Paused</p>
-                <p id="article-progress">Article 0 of 0</p>
+    <div class="app-shell">
+        <aside class="sidebar glass-panel" aria-label="Primary">
+            <div class="brand-lockup">
+                <div class="brand-mark">L</div>
+                <div>
+                    <p class="eyebrow">AI listening suite</p>
+                    <h1>ListenUp</h1>
+                </div>
             </div>
-        </section>
-        
-        <section aria-label="Settings" class="settings-panel">
-             <h3>Settings</h3>
-             <div class="setting-group">
-                 <label for="source-select">News Source:</label>
-                 <select id="source-select">
-                     <!-- Populated by JS -->
-                 </select>
-             </div>
-             <div class="setting-group">
-                 <label for="voice-select">Voice:</label>
-                 <select id="voice-select"></select>
-             </div>
-             <div class="setting-group">
-                 <label for="rate-range">Speed:</label>
-                 <input type="range" id="rate-range" min="0.5" max="2" value="1" step="0.1" aria-label="Speech Speed">
-                 <span id="rate-value" aria-hidden="true">1x</span>
-             </div>
-        </section>
-    </main>
 
-    <footer role="contentinfo">
-        <p>Use Tab to navigate. Enter to activate buttons.</p>
-    </footer>
+            <nav class="sidebar-nav" aria-label="Sections">
+                <a href="#dashboard" class="nav-item is-active">Dashboard</a>
+                <a href="#player" class="nav-item">AI Feed</a>
+                <a href="#insights" class="nav-item">Insights</a>
+                <a href="#settings" class="nav-item">Settings</a>
+            </nav>
+
+            <div class="sidebar-card">
+                <p class="eyebrow">Command shortcuts</p>
+                <div class="shortcut-row"><span>Space</span><span>Play / pause</span></div>
+                <div class="shortcut-row"><span>Cmd K</span><span>Quick search</span></div>
+                <div class="shortcut-row"><span>← / →</span><span>Navigate stories</span></div>
+                <div class="voice-control-panel">
+                    <button id="voice-command-toggle" class="ghost-btn voice-toggle" type="button">Voice commands off</button>
+                    <p id="voice-command-status" class="voice-status">Enable microphone support to speak commands like play, next, source BBC, or voice Samantha.</p>
+                </div>
+                <div class="voice-quick-actions">
+                    <button id="voice-talk-button" class="primary-btn voice-talk-button" type="button">Press to talk</button>
+                    <div class="voice-chip-row" aria-label="Voice command examples">
+                        <span class="voice-chip">Play</span>
+                        <span class="voice-chip">Next</span>
+                        <span class="voice-chip">Source BBC</span>
+                        <span class="voice-chip">Voice Samantha</span>
+                    </div>
+                </div>
+                <div class="voice-guide-card">
+                    <p class="eyebrow">Voice guide</p>
+                    <ul class="voice-guide-list" aria-label="Common voice commands">
+                        <li>"Open dashboard"</li>
+                        <li>"Mixed digest"</li>
+                        <li>"Speed 1.25"</li>
+                        <li>"Source BBC"</li>
+                        <li>"Voice Samantha"</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button id="theme-toggle" class="ghost-btn sidebar-toggle" type="button" aria-label="Toggle light mode">
+                <span>Theme</span>
+                <span class="toggle-pill" aria-hidden="true"></span>
+            </button>
+        </aside>
+
+        <div class="workspace">
+            <header class="topbar glass-panel" role="banner">
+                <div class="topbar-copy">
+                    <p class="eyebrow">Premium AI productivity</p>
+                    <h2>ListenUp turns daily news into a focused listening workflow.</h2>
+                </div>
+                <div class="topbar-actions">
+                    <button id="search-trigger" class="ghost-btn" type="button">Search everywhere</button>
+                    <button id="command-trigger" class="primary-btn" type="button">Command palette</button>
+                </div>
+            </header>
+
+            <main id="dashboard" class="dashboard-grid" role="main">
+                <section class="hero-panel glass-panel">
+                    <div class="hero-copy">
+                        <p class="eyebrow">Today at a glance</p>
+                        <h3>Premium audio intelligence, designed like a modern SaaS workspace.</h3>
+                        <p class="hero-description">Move through mixed daily digests, fine-tune the voice, and keep the experience calm, clear, and keyboard-friendly.</p>
+                    </div>
+
+                    <div class="stats-grid" aria-label="Key metrics">
+                        <article class="stat-card">
+                            <span class="stat-label">Queue depth</span>
+                            <strong id="article-progress">Article 0 of 0</strong>
+                        </article>
+                        <article class="stat-card">
+                            <span class="stat-label">Playback</span>
+                            <strong id="status-text" aria-live="assertive">Status: Paused</strong>
+                        </article>
+                        <article class="stat-card accent-card">
+                            <span class="stat-label">Refresh cycle</span>
+                            <strong id="timer-text" aria-live="polite" aria-atomic="true">Next update in 05:00</strong>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="player" class="player-grid">
+                    <article class="glass-panel media-panel">
+                        <div class="panel-header">
+                            <div>
+                                <p class="eyebrow">AI assistant panel</p>
+                                <h3 id="article-title" aria-live="polite">Ready to Read</h3>
+                            </div>
+                            <div class="live-badge">Live</div>
+                        </div>
+                        <p id="article-content" class="article-body" aria-live="polite">Press play to start your daily digest in a premium, distraction-free interface.</p>
+                        <div class="article-skeleton" aria-hidden="true">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <div class="media-controls controls-panel" aria-label="Playback controls">
+                            <button id="btn-prev" class="control-btn" aria-label="Previous Article" type="button">⏮ <span>Previous</span></button>
+                            <button id="btn-play-pause" class="primary-btn control-btn" aria-label="Play News" type="button"><span class="icon" aria-hidden="true" id="play-pause-icon">▶</span> <span id="play-pause-text">Play</span></button>
+                            <button id="btn-next" class="control-btn" aria-label="Next Article" type="button">⏭ <span>Next</span></button>
+                            <button id="btn-stop" class="danger-btn control-btn" aria-label="Stop Reading" type="button">⏹ <span>Stop</span></button>
+                        </div>
+                    </article>
+
+                    <aside class="glass-panel insight-stack" id="insights" aria-label="Insights and controls">
+                        <section class="mini-card">
+                            <p class="eyebrow">Signal quality</p>
+                            <div class="meter"><span style="width: 76%"></span></div>
+                            <p class="helper-text">High-clarity articles selected from mixed global sources.</p>
+                        </section>
+                        <section class="mini-card">
+                            <p class="eyebrow">Smart actions</p>
+                            <div class="tag-row">
+                                <span class="tag">Summarize</span>
+                                <span class="tag">Voice mode</span>
+                                <span class="tag">Focus queue</span>
+                            </div>
+                        </section>
+                        <section class="mini-card">
+                            <p class="eyebrow">Now playing</p>
+                            <p class="helper-text">A clean listening experience with subtle motion, low clutter, and strong hierarchy.</p>
+                        </section>
+                        <section class="mini-card assistant-feed">
+                            <p class="eyebrow">Assistant feed</p>
+                            <div id="voice-transcript" class="voice-transcript" aria-live="polite">No voice command yet.</div>
+                            <ul id="voice-command-log" class="voice-command-log" aria-label="Recent voice commands"></ul>
+                        </section>
+                    </aside>
+                </section>
+
+                <section id="settings" class="settings-layout">
+                    <article class="glass-panel settings-panel">
+                        <div class="panel-header">
+                            <div>
+                                <p class="eyebrow">Workspace settings</p>
+                                <h3>Refine your listening environment</h3>
+                            </div>
+                        </div>
+                        <div class="setting-grid">
+                            <div class="setting-group">
+                                <label for="source-select">News source</label>
+                                <select id="source-select"></select>
+                            </div>
+                            <div class="setting-group">
+                                <label for="voice-select">Voice</label>
+                                <select id="voice-select"></select>
+                            </div>
+                            <div class="setting-group range-group">
+                                <label for="rate-range">Speech speed</label>
+                                <div class="range-line">
+                                    <input type="range" id="rate-range" min="0.5" max="2" value="1" step="0.1" aria-label="Speech Speed">
+                                    <span id="rate-value" aria-hidden="true">1x</span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="glass-panel onboarding-card">
+                        <p class="eyebrow">Onboarding</p>
+                        <h3>Set up ListenUp in under a minute</h3>
+                        <ul class="checklist">
+                            <li>Pick a source or run a mixed digest.</li>
+                            <li>Choose a voice and speed that fits your flow.</li>
+                            <li>Use keyboard shortcuts to move faster.</li>
+                        </ul>
+                    </article>
+                </section>
+            </main>
+
+            <footer class="footer-bar glass-panel" role="contentinfo">
+                <p>Tab to navigate. Enter activates controls. Cmd K opens command palette. This UI is optimized for keyboard and mobile use.</p>
+            </footer>
+        </div>
+    </div>
+
+    <div class="command-palette" id="command-palette" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="command-title">
+        <div class="command-surface glass-panel">
+            <div class="command-header">
+                <div>
+                    <p class="eyebrow">Quick actions</p>
+                    <h3 id="command-title">Command palette</h3>
+                </div>
+                <button id="command-close" class="ghost-btn" type="button">Close</button>
+            </div>
+            <label class="sr-only" for="command-input">Search commands</label>
+            <input id="command-input" type="text" placeholder="Search news, voices, or actions" autocomplete="off">
+            <div class="command-results">
+                <button class="command-item" type="button" data-command="play">Play or pause</button>
+                <button class="command-item" type="button" data-command="mixed">Load mixed digest</button>
+                <button class="command-item" type="button" data-command="source">Focus source picker</button>
+                <button class="command-item" type="button" data-command="voice">Focus voice picker</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="onboarding-overlay" id="onboarding-overlay" hidden aria-hidden="true">
+        <div class="onboarding-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+            <div class="onboarding-header">
+                <div>
+                    <p class="eyebrow">Welcome to ListenUp</p>
+                    <h3 id="onboarding-title">A quick guided setup</h3>
+                </div>
+                <button id="onboarding-close" class="ghost-btn" type="button" aria-label="Close onboarding">Close</button>
+            </div>
+
+            <div class="onboarding-progress" aria-label="Onboarding steps">
+                <span class="onboarding-progress-dot is-active"></span>
+                <span class="onboarding-progress-dot"></span>
+                <span class="onboarding-progress-dot"></span>
+            </div>
+
+            <div class="onboarding-body">
+                <h4 id="onboarding-step-title">Pick a source fast</h4>
+                <p id="onboarding-step-body">Use the sidebar, command palette, or voice search to jump straight to Reuters, BBC, India news, or a mixed digest.</p>
+            </div>
+
+            <div class="onboarding-actions">
+                <button id="onboarding-skip" class="ghost-btn" type="button">Skip tour</button>
+                <div class="onboarding-nav-actions">
+                    <button id="onboarding-back" class="ghost-btn" type="button">Back</button>
+                    <button id="onboarding-next" class="primary-btn" type="button">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
     <script src="app.js"></script>
 </body>
