@@ -28,11 +28,14 @@ let utterance = null;
 let isPlaying = false;
 let voices = [];
 
+let secondsUntilRefresh = 300; // 5 minutes
+
 // DOM Elements
 const titleEl = document.getElementById('article-title');
 const contentEl = document.getElementById('article-content');
 const progressEl = document.getElementById('article-progress');
 const statusText = document.getElementById('status-text');
+const timerTextEl = document.getElementById('timer-text');
 const btnPlayPause = document.getElementById('btn-play-pause');
 const playPauseIcon = document.getElementById('play-pause-icon');
 const playPauseText = document.getElementById('play-pause-text');
@@ -88,6 +91,7 @@ populateSourceList();
 
 async function fetchNews(rssUrl) {
     stopReading();
+    secondsUntilRefresh = 300;
     titleEl.textContent = 'Loading News...';
     contentEl.textContent = 'Please wait while we fetch the latest articles.';
     progressEl.textContent = '';
@@ -132,6 +136,7 @@ sourceSelect.addEventListener('change', (e) => {
 
 async function fetchMixedNews() {
     stopReading();
+    secondsUntilRefresh = 300;
     titleEl.textContent = 'Loading Daily Digest...';
     contentEl.textContent = 'Aggregating 25 articles (15 India, 10 International). Please wait...';
     progressEl.textContent = '';
@@ -311,14 +316,33 @@ document.addEventListener('keydown', (e) => {
 // Initial load
 fetchMixedNews();
 
-// Auto-update news every 5 minutes (300,000 ms)
+function updateTimerDisplay() {
+    if (isPlaying) {
+        timerTextEl.textContent = 'Update paused while reading';
+    } else {
+        const minutes = Math.floor(secondsUntilRefresh / 60);
+        const seconds = secondsUntilRefresh % 60;
+        timerTextEl.textContent = `Next update in ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+}
+
+// Auto-update countdown timer
 setInterval(() => {
-    // Only refresh if the user is not actively listening to avoid interrupting them
-    if (!isPlaying) {
+    if (isPlaying) {
+        updateTimerDisplay();
+        return;
+    }
+
+    secondsUntilRefresh--;
+    
+    if (secondsUntilRefresh <= 0) {
+        timerTextEl.textContent = 'Updating...';
         if (sourceSelect.value === 'mixed') {
             fetchMixedNews();
         } else {
             fetchNews(sourceSelect.value);
         }
+    } else {
+        updateTimerDisplay();
     }
-}, 5 * 60 * 1000);
+}, 1000);
