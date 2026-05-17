@@ -24,14 +24,20 @@ const newsSources = [
 
 let articles = [];
 let currentArticleIndex = 0;
-let synth = window.speechSynthesis;
-let utterance = null;
 let isPlaying = false;
 let voices = [];
+let utterance = null;
+let refreshSeconds = 300;
+let refreshTimer = null;
+let onboardingStepIndex = 0;
+let recognition = null;
+let voiceCommandsEnabled = false;
+let voiceContinuousListening = false;
+let voicePushToTalkActive = false;
 
-let secondsUntilRefresh = 300; // 5 minutes
+const synth = window.speechSynthesis;
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-// DOM Elements
 const titleEl = document.getElementById('article-title');
 const contentEl = document.getElementById('article-content');
 const progressEl = document.getElementById('article-progress');
@@ -47,7 +53,6 @@ const sourceSelect = document.getElementById('source-select');
 const voiceSelect = document.getElementById('voice-select');
 const rateRange = document.getElementById('rate-range');
 const rateValue = document.getElementById('rate-value');
-const appShell = document.querySelector('.app-shell');
 const commandPalette = document.getElementById('command-palette');
 const commandInput = document.getElementById('command-input');
 const commandTrigger = document.getElementById('command-trigger');
@@ -69,13 +74,6 @@ const onboardingCloseButton = document.getElementById('onboarding-close');
 const onboardingProgressDots = document.querySelectorAll('.onboarding-progress-dot');
 const toastStack = document.getElementById('toast-stack');
 const commandItems = document.querySelectorAll('.command-item');
-const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-let voiceCommandsEnabled = false;
-let recognition = null;
-let voicePushToTalkActive = false;
-let voiceContinuousListening = false;
-let onboardingStepIndex = 0;
 
 const onboardingSteps = [
     {
@@ -104,12 +102,10 @@ function showToast(title, detail = '') {
     toast.innerHTML = `<strong>${title}</strong>${detail ? `<small>${detail}</small>` : ''}`;
     toastStack.appendChild(toast);
 
-    window.setTimeout(() => {
-        toast.remove();
-    }, 3200);
+    window.setTimeout(() => toast.remove(), 3200);
 }
 
-function pushVoiceLog(label, detail) {
+function pushVoiceLog(label, detail = '') {
     if (!voiceCommandLog) return;
 
     const entry = document.createElement('li');
@@ -121,14 +117,27 @@ function pushVoiceLog(label, detail) {
     }
 }
 
+function normalizeText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s.]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function applyTheme(isLight) {
+    document.body.classList.toggle('light-mode', isLight);
+    themeToggle?.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Toggle light mode');
+    window.localStorage?.setItem('listenUp-theme', isLight ? 'light' : 'dark');
+}
+
 function openCommandPalette() {
     if (!commandPalette) return;
 
     commandPalette.hidden = false;
     commandPalette.setAttribute('aria-hidden', 'false');
-    commandPalette.classList.add('is-open');
     commandInput?.focus();
-    showToast('Command palette opened', 'Search actions with the keyboard.');
+    showToast('Command palette opened', 'Search actions or type a voice command.');
 }
 
 function closeCommandPalette() {
@@ -136,27 +145,20 @@ function closeCommandPalette() {
 
     commandPalette.hidden = true;
     commandPalette.setAttribute('aria-hidden', 'true');
-    commandPalette.classList.remove('is-open');
     commandTrigger?.focus();
 }
 
-function setVoiceCommandStatus(message) {
-    if (voiceCommandStatus) {
-        voiceCommandStatus.textContent = message;
-    }
-}
-
-function updateVoiceToggleUI() {
+function updateVoiceCommandUI() {
     if (!voiceCommandToggle) return;
 
     voiceCommandToggle.textContent = voiceCommandsEnabled ? 'Voice commands on' : 'Voice commands off';
     voiceCommandToggle.classList.toggle('is-active', voiceCommandsEnabled);
     voiceCommandToggle.setAttribute('aria-pressed', String(voiceCommandsEnabled));
-    setVoiceCommandStatus(
-        voiceCommandsEnabled
+    if (voiceCommandStatus) {
+        voiceCommandStatus.textContent = voiceCommandsEnabled
             ? 'Listening for commands like play, pause, next, previous, source BBC, voice Samantha, or mixed digest.'
-            : 'Enable microphone support to speak commands like play, next, source BBC, or voice Samantha.'
-    );
+            : 'Enable microphone support to speak commands like play, next, source BBC, or voice Samantha.';
+    }
 }
 
 function updateVoiceTalkButton() {
@@ -172,9 +174,8 @@ function renderOnboardingStep() {
     const step = onboardingSteps[onboardingStepIndex];
     onboardingStepTitle.textContent = step.title;
     onboardingStepBody.textContent = step.body;
-
-    onboardingBackButton.disabled = onboardingStepIndex === 0;
-    onboardingNextButton.textContent = onboardingStepIndex === onboardingSteps.length - 1 ? 'Finish' : 'Next';
+    if (onboardingBackButton) onboardingBackButton.disabled = onboardingStepIndex === 0;
+    if (onboardingNextButton) onboardingNextButton.textContent = onboardingStepIndex === onboardingSteps.length - 1 ? 'Finish' : 'Next';
 
     onboardingProgressDots.forEach((dot, index) => {
         dot.classList.toggle('is-active', index === onboardingStepIndex);
@@ -204,10 +205,6 @@ function advanceOnboardingStep(direction) {
     renderOnboardingStep();
 }
 
-function normalizeVoiceText(text) {
-    return text.toLowerCase().replace(/[^ -]/g, ' ').replace(/[^a-z0-9\s.]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
 function scrollToSection(sectionId) {
     const section = document.getElementById(sectionId);
     if (!section) return false;
@@ -220,11 +217,11 @@ function scrollToSection(sectionId) {
 }
 
 function adjustSpeechRate(delta) {
-    const currentRate = Number.parseFloat(rateRange.value);
+    const currentRate = Number.parseFloat(rateRange?.value || '1');
     const nextRate = Math.min(2, Math.max(0.5, currentRate + delta));
-    rateRange.value = String(nextRate.toFixed(2));
-    rateValue.textContent = `${Number.parseFloat(rateRange.value)}x`;
-    showToast('Speech speed updated', `Now set to ${rateValue.textContent}.`);
+    if (rateRange) rateRange.value = String(nextRate.toFixed(2));
+    if (rateValue) rateValue.textContent = `${nextRate.toFixed(2).replace(/0$/, '').replace(/\.$/, '')}x`;
+    showToast('Speech speed updated', `Now set to ${rateValue?.textContent || `${nextRate}x`}.`);
     return true;
 }
 
@@ -245,65 +242,168 @@ function buildRegionalDigestUrls(region) {
         .map((source) => source.rss);
 }
 
-function scrollToSection(sectionId) {
-    const section = document.getElementById(sectionId);
-    if (!section) return false;
+function populateVoiceList() {
+    if (!voiceSelect) return;
 
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    section.setAttribute('tabindex', '-1');
-    section.focus({ preventScroll: true });
-    showToast('Navigation', `Moved to ${sectionId}.`);
-    return true;
+    voices = synth.getVoices();
+    voiceSelect.innerHTML = '';
+
+    const englishVoices = voices.filter((voice) => voice.lang?.startsWith('en'));
+    const voicesToUse = englishVoices.length > 0 ? englishVoices : voices;
+
+    voicesToUse.forEach((voice) => {
+        const option = document.createElement('option');
+        option.textContent = `${voice.name} (${voice.lang})`;
+        option.setAttribute('data-lang', voice.lang);
+        option.setAttribute('data-name', voice.name);
+        voiceSelect.appendChild(option);
+    });
 }
 
-function adjustSpeechRate(delta) {
-    const currentRate = Number.parseFloat(rateRange.value);
-    const nextRate = Math.min(2, Math.max(0.5, currentRate + delta));
-    rateRange.value = String(nextRate.toFixed(2));
-    rateValue.textContent = `${Number.parseFloat(rateRange.value)}x`;
-    showToast('Speech speed updated', `Now set to ${rateValue.textContent}.`);
-    return true;
+function populateSourceList() {
+    if (!sourceSelect) return;
+
+    sourceSelect.innerHTML = '';
+
+    const mixedOption = document.createElement('option');
+    mixedOption.value = 'mixed';
+    mixedOption.textContent = 'Mixed Daily Digest';
+    sourceSelect.appendChild(mixedOption);
+
+    newsSources.forEach((source) => {
+        const option = document.createElement('option');
+        option.value = source.rss;
+        option.textContent = source.name;
+        sourceSelect.appendChild(option);
+    });
+}
+
+async function fetchArticlesFromUrls(urls) {
+    let fetched = [];
+
+    for (const url of urls) {
+        try {
+            const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+            const data = await response.json();
+
+            if (data.status === 'ok' && Array.isArray(data.items)) {
+                const parsed = data.items.map((item) => {
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = item.description || item.content || '';
+                    return {
+                        title: item.title,
+                        content: tmp.textContent || tmp.innerText || '',
+                    };
+                });
+                fetched = fetched.concat(parsed);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    return fetched;
+}
+
+async function fetchNews(rssUrl) {
+    stopReading();
+    refreshSeconds = 300;
+    setLoadingState(true);
+
+    articles = [];
+    currentArticleIndex = 0;
+    if (titleEl) titleEl.textContent = 'Loading News...';
+    if (contentEl) contentEl.textContent = 'Please wait while we fetch the latest articles.';
+    if (progressEl) progressEl.textContent = '';
+
+    try {
+        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.items.length > 0) {
+            articles = data.items.map((item) => {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = item.description || item.content || '';
+                return {
+                    title: item.title,
+                    content: tmp.textContent || tmp.innerText || '',
+                };
+            });
+            loadArticle(0);
+            showToast('Digest loaded', `${articles.length} articles ready.`);
+        } else {
+            if (titleEl) titleEl.textContent = 'Error';
+            if (contentEl) contentEl.textContent = 'Failed to load news articles. Please try another source.';
+            showToast('Unable to load articles', 'The selected source returned no usable stories.');
+        }
+    } catch (error) {
+        console.error('Error fetching news:', error);
+        if (titleEl) titleEl.textContent = 'Error';
+        if (contentEl) contentEl.textContent = 'A network error occurred. Please try another source.';
+        showToast('Network error', 'Try another source or load the mixed digest.');
+    } finally {
+        setLoadingState(false);
+    }
+}
+
+async function fetchMixedNews() {
+    stopReading();
+    refreshSeconds = 300;
+    setLoadingState(true);
+
+    articles = [];
+    currentArticleIndex = 0;
+    if (titleEl) titleEl.textContent = 'Loading Daily Digest...';
+    if (contentEl) contentEl.textContent = 'Aggregating articles from India and global sources. Please wait...';
+    if (progressEl) progressEl.textContent = '';
+
+    try {
+        const indianUrls = newsSources.filter((source) => source.region === 'india').map((source) => source.rss);
+        const intlUrls = newsSources.filter((source) => source.region === 'intl').map((source) => source.rss);
+        const selectedIndianUrls = indianUrls.sort(() => 0.5 - Math.random()).slice(0, 4);
+        const selectedIntlUrls = intlUrls.sort(() => 0.5 - Math.random()).slice(0, 4);
+
+        const [indianArticles, intlArticles] = await Promise.all([
+            fetchArticlesFromUrls(selectedIndianUrls),
+            fetchArticlesFromUrls(selectedIntlUrls),
+        ]);
+
+        const combined = [...indianArticles.slice(0, 15), ...intlArticles.slice(0, 10)];
+
+        if (combined.length > 0) {
+            articles = combined;
+            loadArticle(0);
+            showToast('Mixed digest ready', `${articles.length} stories curated from multiple sources.`);
+        } else {
+            if (titleEl) titleEl.textContent = 'Error';
+            if (contentEl) contentEl.textContent = 'Failed to load any articles. Please try again.';
+            showToast('Digest unavailable', 'No stories could be aggregated right now.');
+        }
+    } catch (error) {
+        console.error('Error fetching mixed news:', error);
+        if (titleEl) titleEl.textContent = 'Error';
+        if (contentEl) contentEl.textContent = 'A network error occurred while aggregating news.';
+        showToast('Aggregation failed', 'Please try again in a moment.');
+    } finally {
+        setLoadingState(false);
+    }
 }
 
 async function fetchRegionalDigest(region) {
     stopReading();
-    secondsUntilRefresh = 300;
+    refreshSeconds = 300;
     setLoadingState(true);
 
     const regionLabel = region === 'india' ? 'India' : 'Global';
-    titleEl.textContent = `Loading ${regionLabel} News...`;
-    contentEl.textContent = `Curating the latest ${regionLabel.toLowerCase()} stories. Please wait...`;
-    progressEl.textContent = '';
     articles = [];
     currentArticleIndex = 0;
+    if (titleEl) titleEl.textContent = `Loading ${regionLabel} News...`;
+    if (contentEl) contentEl.textContent = `Curating the latest ${regionLabel.toLowerCase()} stories. Please wait...`;
+    if (progressEl) progressEl.textContent = '';
 
     try {
-        const fetchArticles = async (urls) => {
-            let fetched = [];
-
-            for (const url of urls) {
-                try {
-                    const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
-                    const data = await response.json();
-
-                    if (data.status === 'ok') {
-                        const parsed = data.items.map((item) => {
-                            const tmp = document.createElement('DIV');
-                            tmp.innerHTML = item.description || item.content || '';
-                            return { title: item.title, content: tmp.textContent || tmp.innerText || '' };
-                        });
-
-                        fetched = fetched.concat(parsed);
-                    }
-                } catch (error) {
-                    console.error(error);
-                }
-            }
-
-            return fetched;
-        };
-
-        const regionalArticles = await fetchArticles(buildRegionalDigestUrls(region));
+        const urls = buildRegionalDigestUrls(region);
+        const regionalArticles = await fetchArticlesFromUrls(urls);
         const finalArticles = regionalArticles.slice(0, 18);
 
         if (finalArticles.length > 0) {
@@ -311,67 +411,106 @@ async function fetchRegionalDigest(region) {
             loadArticle(0);
             showToast(`${regionLabel} digest ready`, `${articles.length} stories curated.`);
             pushVoiceLog('Digest loaded', `${regionLabel} news`);
-            return;
+        } else {
+            if (titleEl) titleEl.textContent = 'Error';
+            if (contentEl) contentEl.textContent = `Failed to load ${regionLabel.toLowerCase()} articles. Please try again.`;
+            showToast('Digest unavailable', `No ${regionLabel.toLowerCase()} stories could be aggregated right now.`);
         }
-
-        titleEl.textContent = 'Error';
-        contentEl.textContent = `Failed to load ${regionLabel.toLowerCase()} articles. Please try again.`;
-        showToast('Digest unavailable', `No ${regionLabel.toLowerCase()} stories could be aggregated right now.`);
     } catch (error) {
         console.error(`Error fetching ${regionLabel.toLowerCase()} digest:`, error);
-        titleEl.textContent = 'Error';
-        contentEl.textContent = `A network error occurred while loading ${regionLabel.toLowerCase()} news.`;
+        if (titleEl) titleEl.textContent = 'Error';
+        if (contentEl) contentEl.textContent = `A network error occurred while loading ${regionLabel.toLowerCase()} news.`;
         showToast('Aggregation failed', 'Please try again in a moment.');
     } finally {
         setLoadingState(false);
     }
 }
 
-function findSourceByQuery(query) {
-    const normalizedQuery = normalizeVoiceText(query);
-    const allOptions = Array.from(sourceSelect.options).filter((option) => option.value !== 'mixed');
+function loadArticle(index) {
+    if (articles.length === 0) return;
 
-    const exactMatch = allOptions.find((option) => normalizeVoiceText(option.textContent).includes(normalizedQuery));
-    if (exactMatch) {
-        sourceSelect.value = exactMatch.value;
-        sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
-        showToast('Source selected', exactMatch.textContent);
-        pushVoiceLog('Source selected', exactMatch.textContent);
-        return true;
+    currentArticleIndex = Math.min(Math.max(index, 0), articles.length - 1);
+    const article = articles[currentArticleIndex];
+
+    if (titleEl) titleEl.textContent = article.title;
+    if (contentEl) contentEl.textContent = article.content;
+    if (progressEl) progressEl.textContent = `Article ${currentArticleIndex + 1} of ${articles.length}`;
+
+    stopReading();
+}
+
+function prepareUtterance() {
+    if (articles.length === 0) return null;
+
+    const article = articles[currentArticleIndex];
+    utterance = new SpeechSynthesisUtterance(`${article.title}. ${article.content}`);
+
+    const selectedVoiceName = voiceSelect?.selectedOptions[0]?.getAttribute('data-name');
+    const voice = voices.find((v) => v.name === selectedVoiceName);
+    if (voice) utterance.voice = voice;
+
+    utterance.rate = Number.parseFloat(rateRange?.value || '1');
+
+    utterance.onend = () => {
+        isPlaying = false;
+        updateUI();
+        if (currentArticleIndex < articles.length - 1) {
+            loadArticle(currentArticleIndex + 1);
+            window.setTimeout(() => togglePlayPause(), 400);
+        }
+    };
+
+    utterance.onerror = (event) => {
+        console.error('SpeechSynthesis error:', event);
+        isPlaying = false;
+        updateUI();
+        showToast('Speech playback error', 'Try another voice or source.');
+    };
+
+    return utterance;
+}
+
+function updateUI() {
+    if (playPauseIcon) playPauseIcon.textContent = isPlaying ? '⏸' : '▶';
+    if (playPauseText) playPauseText.textContent = isPlaying ? 'Pause' : 'Play';
+    if (statusText) statusText.textContent = isPlaying ? 'Status: Playing' : 'Status: Paused';
+    btnPlayPause?.setAttribute('aria-label', isPlaying ? 'Pause News' : 'Play News');
+}
+
+function togglePlayPause() {
+    if (!articles.length) {
+        showToast('Nothing loaded yet', 'Loading a digest first.');
+        return;
     }
 
-    if (isRegionQuery(normalizedQuery, 'india')) {
-        fetchRegionalDigest('india');
-        return true;
+    if (synth.speaking && !synth.paused && isPlaying) {
+        synth.pause();
+        isPlaying = false;
+    } else if (synth.paused) {
+        synth.resume();
+        isPlaying = true;
+    } else {
+        const nextUtterance = prepareUtterance();
+        if (!nextUtterance) return;
+        synth.speak(nextUtterance);
+        isPlaying = true;
     }
 
-    if (isRegionQuery(normalizedQuery, 'intl')) {
-        fetchRegionalDigest('intl');
-        return true;
-    }
+    updateUI();
+    showToast(isPlaying ? 'Playback started' : 'Playback paused', 'Use the controls or spacebar to continue.');
+}
 
-    const looseMatch = allOptions.find((option) => {
-        const optionText = normalizeVoiceText(option.textContent);
-        return normalizedQuery.split(' ').some((token) => token.length > 2 && optionText.includes(token));
-    });
-
-    if (looseMatch) {
-        sourceSelect.value = looseMatch.value;
-        sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
-        showToast('Source selected', looseMatch.textContent);
-        pushVoiceLog('Source selected', looseMatch.textContent);
-        return true;
-    }
-
-    showToast('Source not found', `Could not match "${query}".`);
-    return false;
+function stopReading() {
+    synth.cancel();
+    isPlaying = false;
+    updateUI();
 }
 
 function setSourceByName(sourceName) {
-    const searchTerm = normalizeVoiceText(sourceName);
-    const matchingOption = Array.from(sourceSelect.options).find((option) => {
+    const searchTerm = normalizeText(sourceName);
+    const matchingOption = Array.from(sourceSelect?.options || []).find((option) => {
         if (option.value === 'mixed') return false;
-        return normalizeVoiceText(option.textContent).includes(searchTerm);
+        return normalizeText(option.textContent).includes(searchTerm);
     });
 
     if (!matchingOption) {
@@ -386,10 +525,8 @@ function setSourceByName(sourceName) {
 }
 
 function setVoiceByName(voiceName) {
-    const searchTerm = normalizeVoiceText(voiceName);
-    const matchingOption = Array.from(voiceSelect.options).find((option) =>
-        normalizeVoiceText(option.textContent).includes(searchTerm)
-    );
+    const searchTerm = normalizeText(voiceName);
+    const matchingOption = Array.from(voiceSelect?.options || []).find((option) => normalizeText(option.textContent).includes(searchTerm));
 
     if (!matchingOption) {
         showToast('Voice not found', `Could not match "${voiceName}".`);
@@ -409,19 +546,15 @@ function setSpeechRate(rateText) {
     }
 
     const clampedRate = Math.min(2, Math.max(0.5, parsedRate));
-    rateRange.value = String(clampedRate);
-    rateValue.textContent = `${clampedRate}x`;
+    if (rateRange) rateRange.value = String(clampedRate);
+    if (rateValue) rateValue.textContent = `${clampedRate}x`;
     showToast('Speed updated', `Speech rate set to ${clampedRate}x.`);
     return true;
 }
 
 function handleVoiceCommand(rawTranscript) {
-    const command = normalizeVoiceText(rawTranscript);
-
-    if (voiceTranscript) {
-        voiceTranscript.textContent = rawTranscript || 'No voice command yet.';
-    }
-
+    const command = normalizeText(rawTranscript);
+    if (voiceTranscript) voiceTranscript.textContent = rawTranscript || 'No voice command yet.';
     pushVoiceLog('Heard', rawTranscript || '');
 
     if (!command) return;
@@ -443,35 +576,12 @@ function handleVoiceCommand(rawTranscript) {
         return;
     }
 
-    if (command.includes('open dashboard') || command.includes('go to dashboard')) {
-        scrollToSection('dashboard');
-        return;
-    }
-
-    if (command.includes('open feed') || command.includes('go to feed') || command.includes('open player')) {
-        scrollToSection('player');
-        return;
-    }
-
-    if (command.includes('open settings') || command.includes('go to settings')) {
-        scrollToSection('settings');
-        return;
-    }
-
-    if (command.includes('open insights') || command.includes('go to insights')) {
-        scrollToSection('insights');
-        return;
-    }
-
-    if (command.includes('close command palette') || command === 'close') {
-        closeCommandPalette();
-        return;
-    }
-
-    if (command.includes('mixed digest') || command.includes('load mixed') || command.includes('mixed news')) {
-        fetchMixedNews();
-        return;
-    }
+    if (command.includes('open dashboard') || command.includes('go to dashboard')) return void scrollToSection('dashboard');
+    if (command.includes('open feed') || command.includes('go to feed') || command.includes('open player')) return void scrollToSection('player');
+    if (command.includes('open settings') || command.includes('go to settings')) return void scrollToSection('settings');
+    if (command.includes('open insights') || command.includes('go to insights')) return void scrollToSection('insights');
+    if (command.includes('close command palette') || command === 'close') return void closeCommandPalette();
+    if (command.includes('mixed digest') || command.includes('load mixed') || command.includes('mixed news')) return void fetchMixedNews();
 
     const sourceMatch = command.match(/\bsource\s+(.+)$/);
     if (sourceMatch && setSourceByName(sourceMatch[1])) return;
@@ -482,25 +592,11 @@ function handleVoiceCommand(rawTranscript) {
     const speedMatch = command.match(/\b(?:speed|rate)\s+([0-9]+(?:\.[0-9]+)?)/);
     if (speedMatch && setSpeechRate(speedMatch[1])) return;
 
-    if (command.includes('faster') || command.includes('speed up') || command.includes('increase speed')) {
-        adjustSpeechRate(0.1);
-        return;
-    }
+    if (command.includes('faster') || command.includes('speed up') || command.includes('increase speed')) return void adjustSpeechRate(0.1);
+    if (command.includes('slower') || command.includes('slow down') || command.includes('decrease speed')) return void adjustSpeechRate(-0.1);
 
-    if (command.includes('slower') || command.includes('slow down') || command.includes('decrease speed')) {
-        adjustSpeechRate(-0.1);
-        return;
-    }
-
-    if (command.includes('next article') || command === 'next' || command.startsWith('next ')) {
-        btnNext.click();
-        return;
-    }
-
-    if (command.includes('previous article') || command.includes('go back') || command === 'previous' || command.startsWith('previous ')) {
-        btnPrev.click();
-        return;
-    }
+    if (command.includes('next article') || command === 'next' || command.startsWith('next ')) return void btnNext?.click();
+    if (command.includes('previous article') || command.includes('go back') || command === 'previous' || command.startsWith('previous ')) return void btnPrev?.click();
 
     if (command.includes('play') && !command.includes('pause')) {
         if (!isPlaying) togglePlayPause();
@@ -509,19 +605,14 @@ function handleVoiceCommand(rawTranscript) {
 
     if (command.includes('pause') || command.includes('stop reading') || command === 'stop') {
         if (isPlaying || synth.speaking) {
-            if (command.includes('stop')) {
-                stopReading();
-            } else if (isPlaying) {
-                togglePlayPause();
-            }
+            if (command.includes('stop')) stopReading();
+            else if (isPlaying) togglePlayPause();
         }
         return;
     }
 
     if (command.includes('repeat') || command.includes('read again')) {
-        if (titleEl?.textContent) {
-            showToast('Current story', `${titleEl.textContent}.`);
-        }
+        if (titleEl?.textContent) showToast('Current story', `${titleEl.textContent}.`);
         if (!isPlaying) togglePlayPause();
         return;
     }
@@ -531,7 +622,6 @@ function handleVoiceCommand(rawTranscript) {
 
 function getRecognition() {
     if (!SpeechRecognitionAPI) return null;
-
     if (recognition) return recognition;
 
     recognition = new SpeechRecognitionAPI();
@@ -549,20 +639,16 @@ function getRecognition() {
     recognition.onerror = (event) => {
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
             voiceCommandsEnabled = false;
-            updateVoiceToggleUI();
-            setVoiceCommandStatus('Microphone access was blocked. Allow access to use voice commands.');
-            openCommandPalette();
-            showToast('Voice commands', 'Try play, pause, next, previous, stop, mixed digest, source Reuters, load India news, or speed 1.25.');
-        }
-
-        if (event.error !== 'aborted') {
+            voiceContinuousListening = false;
+            updateVoiceCommandUI();
+            showToast('Voice commands blocked', 'Allow microphone access to use voice commands.');
+        } else if (event.error !== 'aborted') {
             showToast('Voice control error', 'Try again or use keyboard shortcuts.');
         }
     };
 
     recognition.onend = () => {
         if (!voiceCommandsEnabled || !voiceContinuousListening) return;
-
         try {
             recognition.start();
         } catch (error) {
@@ -576,13 +662,13 @@ function getRecognition() {
 function startVoiceCommands() {
     if (!SpeechRecognitionAPI) {
         showToast('Voice commands unavailable', 'Use a Chromium browser with speech recognition support.');
-        setVoiceCommandStatus('This browser does not support speech recognition.');
+        if (voiceCommandStatus) voiceCommandStatus.textContent = 'This browser does not support speech recognition.';
         return;
     }
 
     voiceCommandsEnabled = true;
     voiceContinuousListening = true;
-    updateVoiceToggleUI();
+    updateVoiceCommandUI();
 
     const activeRecognition = getRecognition();
     if (!activeRecognition) return;
@@ -590,11 +676,17 @@ function startVoiceCommands() {
     try {
         activeRecognition.start();
         showToast('Voice commands enabled', 'Say play, pause, next, previous, source BBC, voice Samantha, or mixed digest.');
+    } catch (error) {
+        console.warn('Voice recognition start skipped:', error);
+    }
+}
 
 function stopVoiceCommands() {
     voiceCommandsEnabled = false;
     voiceContinuousListening = false;
-    updateVoiceToggleUI();
+    voicePushToTalkActive = false;
+    updateVoiceCommandUI();
+    updateVoiceTalkButton();
 
     if (recognition) {
         try {
@@ -608,29 +700,30 @@ function stopVoiceCommands() {
     pushVoiceLog('Voice assistant', 'Listening disabled');
 }
 
+function toggleVoiceCommands() {
+    if (voiceCommandsEnabled) stopVoiceCommands();
+    else startVoiceCommands();
+}
+
 function startPushToTalk() {
-    if (!SpeechRecognitionAPI || !recognition) return;
+    if (!SpeechRecognitionAPI) return;
+
+    const activeRecognition = getRecognition();
+    if (!activeRecognition) return;
 
     voiceCommandsEnabled = true;
     voiceContinuousListening = false;
     voicePushToTalkActive = true;
     updateVoiceTalkButton();
-    updateVoiceToggleUI();
+    updateVoiceCommandUI();
 
     try {
-        recognition.start();
+        activeRecognition.start();
     } catch (error) {
         console.warn('Push to talk start skipped:', error);
     }
 }
 
-        if (command.includes('repeat') || command.includes('read again')) {
-            if (titleEl?.textContent) {
-                showToast('Current story', `${titleEl.textContent}.`);
-            }
-            if (!isPlaying) togglePlayPause();
-            return;
-        }
 function stopPushToTalk() {
     voicePushToTalkActive = false;
     updateVoiceTalkButton();
@@ -644,422 +737,146 @@ function stopPushToTalk() {
     }
 
     voiceCommandsEnabled = false;
-    updateVoiceToggleUI();
+    updateVoiceCommandUI();
 }
 
-function toggleVoiceCommands() {
-    if (voiceCommandsEnabled) {
-        stopVoiceCommands();
-    } else {
-        startVoiceCommands();
-    }
-}
-
-function applyTheme(isLight) {
-    document.body.classList.toggle('light-mode', isLight);
-    if (themeToggle) {
-        themeToggle.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Toggle light mode');
-    }
-    window.localStorage?.setItem('listenUp-theme', isLight ? 'light' : 'dark');
-}
-
-const savedTheme = window.localStorage?.getItem('listenUp-theme');
-applyTheme(savedTheme === 'light');
-
-// Initialize voices
-function populateVoiceList() {
-    voices = synth.getVoices();
-    voiceSelect.innerHTML = '';
-    
-    // Prioritize English voices
-    const englishVoices = voices.filter(voice => voice.lang.startsWith('en'));
-    const voicesToUse = englishVoices.length > 0 ? englishVoices : voices;
-    
-    voicesToUse.forEach((voice, i) => {
-        const option = document.createElement('option');
-        option.textContent = `${voice.name} (${voice.lang})`;
-        option.setAttribute('data-lang', voice.lang);
-        option.setAttribute('data-name', voice.name);
-        voiceSelect.appendChild(option);
+function setupEventListeners() {
+    btnPlayPause?.addEventListener('click', togglePlayPause);
+    btnStop?.addEventListener('click', stopReading);
+    btnNext?.addEventListener('click', () => {
+        if (articles.length === 0) return;
+        loadArticle(currentArticleIndex + 1);
+        if (isPlaying) togglePlayPause();
     });
-}
-
-populateVoiceList();
-if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = populateVoiceList;
-}
-
-// Initialize News Sources
-function populateSourceList() {
-    sourceSelect.innerHTML = '';
-    
-    // Add Mixed Option
-    const mixedOption = document.createElement('option');
-    mixedOption.value = 'mixed';
-    mixedOption.textContent = 'Mixed Daily Digest (25 Articles)';
-    sourceSelect.appendChild(mixedOption);
-
-    newsSources.forEach(source => {
-        const option = document.createElement('option');
-        option.value = source.rss;
-        option.textContent = source.name;
-        sourceSelect.appendChild(option);
+    btnPrev?.addEventListener('click', () => {
+        if (articles.length === 0) return;
+        loadArticle(currentArticleIndex - 1);
+        if (isPlaying) togglePlayPause();
     });
-}
-populateSourceList();
-updateVoiceToggleUI();
-updateVoiceTalkButton();
-renderOnboardingStep();
 
-async function fetchNews(rssUrl) {
-    stopReading();
-    secondsUntilRefresh = 300;
-    setLoadingState(true);
-    titleEl.textContent = 'Loading News...';
-    contentEl.textContent = 'Please wait while we fetch the latest articles.';
-    progressEl.textContent = '';
-    articles = [];
-    currentArticleIndex = 0;
+    rateRange?.addEventListener('input', () => {
+        if (rateValue && rateRange) rateValue.textContent = `${rateRange.value}x`;
+    });
 
-    try {
-        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
-        const data = await response.json();
-        
-        if (data.status === 'ok' && data.items.length > 0) {
-            articles = data.items.map(item => {
-                // Strip HTML from description
-                const tmp = document.createElement("DIV");
-                tmp.innerHTML = item.description || item.content || '';
-                const cleanContent = tmp.textContent || tmp.innerText || "";
-                
-                return {
-                    title: item.title,
-                    content: cleanContent
-                };
-            });
-            loadArticle(0);
-            showToast('Digest loaded', `${articles.length} articles ready.`);
-        } else {
-            titleEl.textContent = 'Error';
-            contentEl.textContent = 'Failed to load news articles. Please try another source.';
-            showToast('Unable to load articles', 'The selected source returned no usable stories.');
+    themeToggle?.addEventListener('click', () => {
+        const isLight = !document.body.classList.contains('light-mode');
+        applyTheme(isLight);
+        showToast(isLight ? 'Light mode enabled' : 'Dark mode enabled', 'The workspace theme has been updated.');
+    });
+
+    commandTrigger?.addEventListener('click', openCommandPalette);
+    searchTrigger?.addEventListener('click', openCommandPalette);
+    commandClose?.addEventListener('click', closeCommandPalette);
+    commandClose?.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        closeCommandPalette();
+    });
+
+    voiceCommandToggle?.addEventListener('click', toggleVoiceCommands);
+    voiceTalkButton?.addEventListener('mousedown', startPushToTalk);
+    voiceTalkButton?.addEventListener('touchstart', startPushToTalk, { passive: true });
+    voiceTalkButton?.addEventListener('mouseup', stopPushToTalk);
+    voiceTalkButton?.addEventListener('mouseleave', stopPushToTalk);
+    voiceTalkButton?.addEventListener('touchend', stopPushToTalk);
+
+    onboardingBackButton?.addEventListener('click', () => advanceOnboardingStep(-1));
+    onboardingNextButton?.addEventListener('click', () => {
+        if (onboardingStepIndex === onboardingSteps.length - 1) closeOnboarding();
+        else advanceOnboardingStep(1);
+    });
+    onboardingSkipButton?.addEventListener('click', closeOnboarding);
+    onboardingCloseButton?.addEventListener('click', closeOnboarding);
+    onboardingOverlay?.addEventListener('click', (event) => {
+        if (event.target === onboardingOverlay) closeOnboarding();
+    });
+
+    commandItems.forEach((item) => {
+        item.addEventListener('click', () => {
+            const action = item.dataset.command;
+            if (action === 'play') togglePlayPause();
+            else if (action === 'mixed') fetchMixedNews();
+            else if (action === 'source') sourceSelect?.focus();
+            else if (action === 'voice') voiceSelect?.focus();
+            closeCommandPalette();
+        });
+    });
+
+    commandInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handleVoiceCommand(commandInput.value);
+            commandInput.value = '';
+        } else if (event.key === 'Escape') {
+            closeCommandPalette();
         }
-    } catch (error) {
-        console.error("Error fetching news:", error);
-        titleEl.textContent = 'Error';
-        contentEl.textContent = 'A network error occurred. Please try another source.';
-        showToast('Network error', 'Try another source or load the mixed digest.');
-    } finally {
-        setLoadingState(false);
-    }
-}
+    });
 
-sourceSelect.addEventListener('change', (e) => {
-    if (e.target.value === 'mixed') {
-        fetchMixedNews();
-    } else {
-        fetchNews(e.target.value);
-    }
-});
-
-async function fetchMixedNews() {
-    stopReading();
-    secondsUntilRefresh = 300;
-    setLoadingState(true);
-    titleEl.textContent = 'Loading Daily Digest...';
-    contentEl.textContent = 'Aggregating 25 articles (15 India, 10 International). Please wait...';
-    progressEl.textContent = '';
-    articles = [];
-    currentArticleIndex = 0;
-
-    try {
-        const indianUrls = newsSources.filter(s => s.region === 'india').map(s => s.rss);
-        const intlUrls = newsSources.filter(s => s.region === 'intl').map(s => s.rss);
-        
-        // Randomly pick a few sources from each to distribute the load
-        const selectedIndianUrls = indianUrls.sort(() => 0.5 - Math.random()).slice(0, 4);
-        const selectedIntlUrls = intlUrls.sort(() => 0.5 - Math.random()).slice(0, 4);
-        
-        const fetchArticles = async (urls) => {
-            let fetched = [];
-            for (const url of urls) {
-                try {
-                    const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
-                    const data = await response.json();
-                    if (data.status === 'ok') {
-                        const parsed = data.items.map(item => {
-                            const tmp = document.createElement("DIV");
-                            tmp.innerHTML = item.description || item.content || '';
-                            return { title: item.title, content: tmp.textContent || tmp.innerText || "" };
-                        });
-                        fetched = fetched.concat(parsed);
-                    }
-                } catch(e) { console.error(e); }
-            }
-            return fetched;
-        };
-
-        const [indianArticles, intlArticles] = await Promise.all([
-            fetchArticles(selectedIndianUrls),
-            fetchArticles(selectedIntlUrls)
-        ]);
-        
-        const finalIndian = indianArticles.slice(0, 15);
-        const finalIntl = intlArticles.slice(0, 10);
-        
-        let combined = [...finalIndian, ...finalIntl];
-        
-        if (combined.length > 0) {
-            articles = combined;
-            loadArticle(0);
-            showToast('Mixed digest ready', `${articles.length} stories curated from multiple sources.`);
-        } else {
-            titleEl.textContent = 'Error';
-            contentEl.textContent = 'Failed to load any articles. Please try again.';
-            showToast('Digest unavailable', 'No stories could be aggregated right now.');
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeCommandPalette();
+            if (onboardingOverlay && !onboardingOverlay.hidden) closeOnboarding();
         }
-    } catch (error) {
-        console.error("Error fetching mixed news:", error);
-        titleEl.textContent = 'Error';
-        contentEl.textContent = 'A network error occurred while aggregating news.';
-        showToast('Aggregation failed', 'Please try again in a moment.');
-    } finally {
-        setLoadingState(false);
-    }
-}
 
-function loadArticle(index) {
-    if (articles.length === 0) return;
-    if (index < 0) index = 0;
-    if (index >= articles.length) index = articles.length - 1;
-    
-    currentArticleIndex = index;
-    const article = articles[currentArticleIndex];
-    
-    titleEl.textContent = article.title;
-    contentEl.textContent = article.content;
-    progressEl.textContent = `Article ${currentArticleIndex + 1} of ${articles.length}`;
-    
-    stopReading(); // Stop reading previous when changing article
-}
-
-function prepareUtterance() {
-    if (articles.length === 0) return;
-    const article = articles[currentArticleIndex];
-    const textToRead = `${article.title}. ${article.content}`;
-    
-    utterance = new SpeechSynthesisUtterance(textToRead);
-    
-    // Set selected voice
-    const selectedVoiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
-    const voice = voices.find(v => v.name === selectedVoiceName);
-    if (voice) {
-        utterance.voice = voice;
-    }
-    
-    // Set rate
-    utterance.rate = rateRange.value;
-    
-    utterance.onend = () => {
-        isPlaying = false;
-        updateUI();
-        // Auto-play next article if there is one
-        if (currentArticleIndex < articles.length - 1) {
-            loadArticle(currentArticleIndex + 1);
-            setTimeout(() => togglePlayPause(), 500); // slight pause between articles
-        }
-    };
-    
-    utterance.onerror = (e) => {
-        console.error('SpeechSynthesis error:', e);
-        isPlaying = false;
-        updateUI();
-    };
-}
-
-function togglePlayPause() {
-    if (synth.speaking && !synth.paused && isPlaying) {
-        synth.pause();
-        isPlaying = false;
-    } else if (synth.paused) {
-        synth.resume();
-        isPlaying = true;
-    } else {
-        prepareUtterance();
-        synth.speak(utterance);
-        isPlaying = true;
-    }
-    updateUI();
-    showToast(isPlaying ? 'Playback started' : 'Playback paused', 'Use the controls or spacebar to continue.');
-}
-
-function stopReading() {
-    synth.cancel();
-    isPlaying = false;
-    updateUI();
-}
-
-function updateUI() {
-    if (isPlaying) {
-        playPauseIcon.textContent = '⏸';
-        playPauseText.textContent = 'Pause';
-        statusText.textContent = 'Status: Playing';
-        btnPlayPause.setAttribute('aria-label', 'Pause News');
-    } else {
-        playPauseIcon.textContent = '▶';
-        playPauseText.textContent = 'Play';
-        statusText.textContent = 'Status: Paused';
-        btnPlayPause.setAttribute('aria-label', 'Play News');
-    }
-}
-
-// Event Listeners
-btnPlayPause.addEventListener('click', togglePlayPause);
-btnStop.addEventListener('click', stopReading);
-
-btnNext.addEventListener('click', () => {
-    loadArticle(currentArticleIndex + 1);
-    if(isPlaying) togglePlayPause(); // auto-play on next if it was playing
-});
-
-btnPrev.addEventListener('click', () => {
-    loadArticle(currentArticleIndex - 1);
-    if(isPlaying) togglePlayPause(); // auto-play on prev if it was playing
-});
-
-rateRange.addEventListener('input', () => {
-    rateValue.textContent = rateRange.value + 'x';
-});
-
-themeToggle?.addEventListener('click', () => {
-    const isLight = !document.body.classList.contains('light-mode');
-    applyTheme(isLight);
-    showToast(isLight ? 'Light mode enabled' : 'Dark mode enabled', 'The workspace theme has been updated.');
-});
-
-commandTrigger?.addEventListener('click', openCommandPalette);
-searchTrigger?.addEventListener('click', openCommandPalette);
-commandClose?.addEventListener('mousedown', (event) => {
-    event.preventDefault();
-    closeCommandPalette();
-});
-commandClose?.addEventListener('click', closeCommandPalette);
-voiceCommandToggle?.addEventListener('click', toggleVoiceCommands);
-voiceTalkButton?.addEventListener('mousedown', startPushToTalk);
-voiceTalkButton?.addEventListener('touchstart', startPushToTalk, { passive: true });
-voiceTalkButton?.addEventListener('mouseup', stopPushToTalk);
-voiceTalkButton?.addEventListener('mouseleave', stopPushToTalk);
-voiceTalkButton?.addEventListener('touchend', stopPushToTalk);
-
-onboardingBackButton?.addEventListener('click', () => advanceOnboardingStep(-1));
-onboardingNextButton?.addEventListener('click', () => {
-    if (onboardingStepIndex === onboardingSteps.length - 1) {
-        closeOnboarding();
-        return;
-    }
-
-    advanceOnboardingStep(1);
-});
-onboardingSkipButton?.addEventListener('click', closeOnboarding);
-onboardingCloseButton?.addEventListener('click', closeOnboarding);
-onboardingOverlay?.addEventListener('click', (event) => {
-    if (event.target === onboardingOverlay) {
-        closeOnboarding();
-    }
-});
-
-commandItems.forEach((item) => {
-    item.addEventListener('click', () => {
-        const action = item.dataset.command;
-        if (action === 'play') {
+        if (event.key === ' ' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')) {
+            event.preventDefault();
             togglePlayPause();
-        } else if (action === 'mixed') {
-            fetchMixedNews();
-        } else if (action === 'source') {
-            sourceSelect.focus();
-        } else if (action === 'voice') {
-            voiceSelect.focus();
         }
-        closeCommandPalette();
+
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            openCommandPalette();
+        }
     });
-});
 
-commandPalette?.addEventListener('click', (event) => {
-    if (event.target === commandPalette) {
-        closeCommandPalette();
-    }
-});
-
-commandInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        closeCommandPalette();
-    }
-});
-
-// Keyboard shortcuts for blind users (very important)
-document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        openCommandPalette();
-        return;
-    }
-
-    if (e.key === 'Escape' && !commandPalette.hidden) {
-        closeCommandPalette();
-        return;
-    }
-
-    // Space to play/pause (if not focused on a button or select to avoid double firing)
-    if (e.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {
-        e.preventDefault();
-        togglePlayPause();
-    }
-    // Right Arrow for Next
-    if (e.code === 'ArrowRight' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'SELECT') {
-        btnNext.click();
-    }
-    // Left Arrow for Prev
-    if (e.code === 'ArrowLeft' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'SELECT') {
-        btnPrev.click();
-    }
-});
-
-// Initial load
-fetchMixedNews();
-
-if (!window.localStorage?.getItem('listenUp-onboarding-dismissed')) {
-    window.setTimeout(() => {
-        openOnboarding();
-    }, 900);
+    sourceSelect?.addEventListener('change', (event) => {
+        if (event.target.value === 'mixed') fetchMixedNews();
+        else fetchNews(event.target.value);
+    });
 }
 
-function updateTimerDisplay() {
-    if (isPlaying) {
-        timerTextEl.textContent = 'Update paused while reading';
-    } else {
-        const minutes = Math.floor(secondsUntilRefresh / 60);
-        const seconds = secondsUntilRefresh % 60;
-        timerTextEl.textContent = `Next update in ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    }
-}
+function startRefreshTimer() {
+    if (refreshTimer) window.clearInterval(refreshTimer);
 
-// Auto-update countdown timer
-setInterval(() => {
-    if (isPlaying) {
-        updateTimerDisplay();
-        return;
-    }
-
-    secondsUntilRefresh--;
-    
-    if (secondsUntilRefresh <= 0) {
-        timerTextEl.textContent = 'Updating...';
-        if (sourceSelect.value === 'mixed') {
-            fetchMixedNews();
-        } else {
-            fetchNews(sourceSelect.value);
+    refreshTimer = window.setInterval(() => {
+        refreshSeconds -= 1;
+        if (timerTextEl) {
+            const minutes = String(Math.floor(refreshSeconds / 60)).padStart(2, '0');
+            const seconds = String(refreshSeconds % 60).padStart(2, '0');
+            timerTextEl.textContent = `Next update in ${minutes}:${seconds}`;
         }
-    } else {
-        updateTimerDisplay();
+
+        if (refreshSeconds <= 0) {
+            refreshSeconds = 300;
+            const currentSource = sourceSelect?.value || 'mixed';
+            if (currentSource === 'mixed') fetchMixedNews();
+            else fetchNews(currentSource);
+        }
+    }, 1000);
+}
+
+function init() {
+    populateVoiceList();
+    populateSourceList();
+    updateVoiceCommandUI();
+    updateVoiceTalkButton();
+    renderOnboardingStep();
+    setupEventListeners();
+    startRefreshTimer();
+
+    const savedTheme = window.localStorage?.getItem('listenUp-theme');
+    applyTheme(savedTheme === 'light');
+
+    if (window.speechSynthesis?.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = populateVoiceList;
     }
-}, 1000);
+
+    const onboardingDismissed = window.localStorage?.getItem('listenUp-onboarding-dismissed');
+    if (!onboardingDismissed) {
+        window.setTimeout(openOnboarding, 350);
+    }
+
+    // Load content immediately so playback has something to read.
+    fetchMixedNews();
+}
+
+init();
