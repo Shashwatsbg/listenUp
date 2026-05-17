@@ -1,24 +1,24 @@
 // News Sources Configuration
 const newsSources = [
-    { id: 'bbc', name: 'BBC News', rss: 'http://feeds.bbci.co.uk/news/rss.xml' },
-    { id: 'cnn', name: 'CNN Top Stories', rss: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
-    { id: 'nyt', name: 'New York Times', rss: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
-    { id: 'bloomberg', name: 'Bloomberg', rss: 'https://feeds.bloomberg.com/markets/news.rss' },
-    { id: 'fp', name: 'Foreign Policy', rss: 'https://foreignpolicy.com/feed/' },
-    { id: 'bs', name: 'Business Standard', rss: 'https://www.business-standard.com/rss/home_page_top_stories.rss' },
-    { id: 'wion', name: 'WION', rss: 'https://www.wionews.com/feeds/wion-world.rss' },
-    { id: 'aajtak', name: 'AajTak', rss: 'https://feed.aajtak.in/rss/1471018/rss.xml' },
-    { id: 'rt', name: 'Russia Today', rss: 'https://www.rt.com/rss/news/' },
-    { id: 'gt', name: 'Global Times', rss: 'https://www.globaltimes.cn/rss/rss.xml' },
-    { id: 'sputnik', name: 'Sputnik', rss: 'https://sputniknews.com/export/pool/custom_all/' },
-    { id: 'france24', name: 'France 24', rss: 'https://www.france24.com/en/rss' },
-    { id: 'ndtv', name: 'NDTV', rss: 'https://feeds.feedburner.com/ndtvnews-top-stories' },
-    { id: 'thehindu', name: 'The Hindu', rss: 'https://www.thehindu.com/feeder/default.rss' },
-    { id: 'ht', name: 'Hindustan Times', rss: 'https://www.hindustantimes.com/feeds/topnews/rss' },
-    { id: 'theprint', name: 'The Print', rss: 'https://theprint.in/feed/' },
-    { id: 'abp', name: 'ABP News', rss: 'https://news.abplive.com/home/feed' },
-    { id: 'fars', name: 'Fars News', rss: 'https://en.farsnews.ir/rss' },
-    { id: 'aljazeera', name: 'Al Jazeera', rss: 'https://www.aljazeera.com/xml/rss/all.xml' }
+    { id: 'bbc', region: 'intl', name: 'BBC News', rss: 'http://feeds.bbci.co.uk/news/rss.xml' },
+    { id: 'cnn', region: 'intl', name: 'CNN Top Stories', rss: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
+    { id: 'nyt', region: 'intl', name: 'New York Times', rss: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
+    { id: 'bloomberg', region: 'intl', name: 'Bloomberg', rss: 'https://feeds.bloomberg.com/markets/news.rss' },
+    { id: 'fp', region: 'intl', name: 'Foreign Policy', rss: 'https://foreignpolicy.com/feed/' },
+    { id: 'bs', region: 'india', name: 'Business Standard', rss: 'https://www.business-standard.com/rss/home_page_top_stories.rss' },
+    { id: 'wion', region: 'india', name: 'WION', rss: 'https://www.wionews.com/feeds/wion-world.rss' },
+    { id: 'aajtak', region: 'india', name: 'AajTak', rss: 'https://feed.aajtak.in/rss/1471018/rss.xml' },
+    { id: 'rt', region: 'intl', name: 'Russia Today', rss: 'https://www.rt.com/rss/news/' },
+    { id: 'gt', region: 'intl', name: 'Global Times', rss: 'https://www.globaltimes.cn/rss/rss.xml' },
+    { id: 'sputnik', region: 'intl', name: 'Sputnik', rss: 'https://sputniknews.com/export/pool/custom_all/' },
+    { id: 'france24', region: 'intl', name: 'France 24', rss: 'https://www.france24.com/en/rss' },
+    { id: 'ndtv', region: 'india', name: 'NDTV', rss: 'https://feeds.feedburner.com/ndtvnews-top-stories' },
+    { id: 'thehindu', region: 'india', name: 'The Hindu', rss: 'https://www.thehindu.com/feeder/default.rss' },
+    { id: 'ht', region: 'india', name: 'Hindustan Times', rss: 'https://www.hindustantimes.com/feeds/topnews/rss' },
+    { id: 'theprint', region: 'india', name: 'The Print', rss: 'https://theprint.in/feed/' },
+    { id: 'abp', region: 'india', name: 'ABP News', rss: 'https://news.abplive.com/home/feed' },
+    { id: 'fars', region: 'intl', name: 'Fars News', rss: 'https://en.farsnews.ir/rss' },
+    { id: 'aljazeera', region: 'intl', name: 'Al Jazeera', rss: 'https://www.aljazeera.com/xml/rss/all.xml' }
 ];
 
 let articles = [];
@@ -70,6 +70,13 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
 // Initialize News Sources
 function populateSourceList() {
     sourceSelect.innerHTML = '';
+    
+    // Add Mixed Option
+    const mixedOption = document.createElement('option');
+    mixedOption.value = 'mixed';
+    mixedOption.textContent = 'Mixed Daily Digest (25 Articles)';
+    sourceSelect.appendChild(mixedOption);
+
     newsSources.forEach(source => {
         const option = document.createElement('option');
         option.value = source.rss;
@@ -116,8 +123,71 @@ async function fetchNews(rssUrl) {
 }
 
 sourceSelect.addEventListener('change', (e) => {
-    fetchNews(e.target.value);
+    if (e.target.value === 'mixed') {
+        fetchMixedNews();
+    } else {
+        fetchNews(e.target.value);
+    }
 });
+
+async function fetchMixedNews() {
+    stopReading();
+    titleEl.textContent = 'Loading Daily Digest...';
+    contentEl.textContent = 'Aggregating 25 articles (15 India, 10 International). Please wait...';
+    progressEl.textContent = '';
+    articles = [];
+    currentArticleIndex = 0;
+
+    try {
+        const indianUrls = newsSources.filter(s => s.region === 'india').map(s => s.rss);
+        const intlUrls = newsSources.filter(s => s.region === 'intl').map(s => s.rss);
+        
+        // Randomly pick a few sources from each to distribute the load
+        const selectedIndianUrls = indianUrls.sort(() => 0.5 - Math.random()).slice(0, 4);
+        const selectedIntlUrls = intlUrls.sort(() => 0.5 - Math.random()).slice(0, 4);
+        
+        const fetchArticles = async (urls) => {
+            let fetched = [];
+            for (const url of urls) {
+                try {
+                    const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+                    const data = await response.json();
+                    if (data.status === 'ok') {
+                        const parsed = data.items.map(item => {
+                            const tmp = document.createElement("DIV");
+                            tmp.innerHTML = item.description || item.content || '';
+                            return { title: item.title, content: tmp.textContent || tmp.innerText || "" };
+                        });
+                        fetched = fetched.concat(parsed);
+                    }
+                } catch(e) { console.error(e); }
+            }
+            return fetched;
+        };
+
+        const [indianArticles, intlArticles] = await Promise.all([
+            fetchArticles(selectedIndianUrls),
+            fetchArticles(selectedIntlUrls)
+        ]);
+        
+        const finalIndian = indianArticles.slice(0, 15);
+        const finalIntl = intlArticles.slice(0, 10);
+        
+        let combined = [...finalIndian, ...finalIntl];
+        
+        if (combined.length > 0) {
+            articles = combined;
+            loadArticle(0);
+        } else {
+            titleEl.textContent = 'Error';
+            contentEl.textContent = 'Failed to load any articles. Please try again.';
+        }
+    } catch (error) {
+        console.error("Error fetching mixed news:", error);
+        titleEl.textContent = 'Error';
+        contentEl.textContent = 'A network error occurred while aggregating news.';
+    }
+}
 
 function loadArticle(index) {
     if (articles.length === 0) return;
@@ -239,4 +309,16 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Initial load
-fetchNews(newsSources[0].rss);
+fetchMixedNews();
+
+// Auto-update news every 5 minutes (300,000 ms)
+setInterval(() => {
+    // Only refresh if the user is not actively listening to avoid interrupting them
+    if (!isPlaying) {
+        if (sourceSelect.value === 'mixed') {
+            fetchMixedNews();
+        } else {
+            fetchNews(sourceSelect.value);
+        }
+    }
+}, 5 * 60 * 1000);
