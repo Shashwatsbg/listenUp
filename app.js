@@ -11,7 +11,14 @@ const newsSources = [
     { id: 'rt', name: 'Russia Today', rss: 'https://www.rt.com/rss/news/' },
     { id: 'gt', name: 'Global Times', rss: 'https://www.globaltimes.cn/rss/rss.xml' },
     { id: 'sputnik', name: 'Sputnik', rss: 'https://sputniknews.com/export/pool/custom_all/' },
-    { id: 'france24', name: 'France 24', rss: 'https://www.france24.com/en/rss' }
+    { id: 'france24', name: 'France 24', rss: 'https://www.france24.com/en/rss' },
+    { id: 'ndtv', name: 'NDTV', rss: 'https://feeds.feedburner.com/ndtvnews-top-stories' },
+    { id: 'thehindu', name: 'The Hindu', rss: 'https://www.thehindu.com/feeder/default.rss' },
+    { id: 'ht', name: 'Hindustan Times', rss: 'https://www.hindustantimes.com/feeds/topnews/rss' },
+    { id: 'theprint', name: 'The Print', rss: 'https://theprint.in/feed/' },
+    { id: 'abp', name: 'ABP News', rss: 'https://news.abplive.com/home/feed' },
+    { id: 'fars', name: 'Fars News', rss: 'https://en.farsnews.ir/rss' },
+    { id: 'aljazeera', name: 'Al Jazeera', rss: 'https://www.aljazeera.com/xml/rss/all.xml' }
 ];
 
 let articles = [];
