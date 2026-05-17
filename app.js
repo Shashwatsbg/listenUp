@@ -612,14 +612,36 @@ function handleVoiceCommand(rawTranscript) {
     if (matchesAny(command, ['open insights', 'go to insights', 'show insights'])) return void scrollToSection('insights');
     if (matchesAny(command, ['close command palette', 'close palette', 'close window'])) return void closeCommandPalette();
 
-    if (matchesAny(command, ['today news', 'today s news', 'todays news', 'today headline', 'today headlines', 'headlines news', 'headings news', 'headlines', 'daily digest', 'read today s news', 'play todays news', 'play today news', 'load todays news', 'load today news'])) {
+    if (matchesAny(command, [
+        'today news',
+        'today s news',
+        'todays news',
+        'today headline',
+        'today headlines',
+        'headlines news',
+        'headings news',
+        'headlines',
+        'daily digest',
+        'read today s news',
+        'read today news',
+        'play today s news',
+        'play todays news',
+        'play today news',
+        'play the news',
+        'load today s news',
+        'load todays news',
+        'load today news',
+        'start today s news',
+        'start today news',
+        'read me the news',
+    ])) {
         void fetchMixedNews().then((loaded) => {
             if (loaded) playCurrentArticle();
         });
         return;
     }
 
-    if (matchesAny(command, ['mixed digest', 'load mixed', 'mixed news', 'daily brief'])) {
+    if (matchesAny(command, ['mixed digest', 'load mixed', 'mixed news', 'daily brief', 'latest news', 'open news'])) {
         void fetchMixedNews();
         return;
     }
@@ -646,28 +668,28 @@ function handleVoiceCommand(rawTranscript) {
         return;
     }
 
-    if (matchesAny(command, ['next article', 'next story', 'next news', 'skip ahead']) || command === 'next' || command.startsWith('next ')) {
+    if (matchesAny(command, ['next article', 'next story', 'next news', 'skip ahead', 'next item', 'move next']) || command === 'next' || command.startsWith('next ')) {
         advanceArticle(1);
         return;
     }
 
-    if (matchesAny(command, ['previous article', 'previous story', 'previous news', 'go back', 'back', 'previous item']) || command === 'previous' || command.startsWith('previous ')) {
+    if (matchesAny(command, ['previous article', 'previous story', 'previous news', 'go back', 'back', 'previous item', 'move back', 'go previous'])) {
         advanceArticle(-1);
         return;
     }
 
-    if (matchesAny(command, ['pause', 'pause reading', 'pause playback', 'hold on'])) {
+    if (matchesAny(command, ['pause', 'pause reading', 'pause playback', 'pause the news', 'hold on', 'stop for a moment'])) {
         if (isPlaying) togglePlayPause();
         else if (synth.speaking && !synth.paused) togglePlayPause();
         return;
     }
 
-    if (matchesAny(command, ['stop reading', 'stop playback', 'stop speaking', 'stop'])) {
+    if (matchesAny(command, ['stop reading', 'stop playback', 'stop speaking', 'stop the news', 'stop'])) {
         stopReading();
         return;
     }
 
-    if (matchesAny(command, ['play', 'resume', 'continue', 'start reading', 'read this', 'read current article'])) {
+    if (matchesAny(command, ['play', 'resume', 'continue', 'start reading', 'read this', 'read current article', 'start the news', 'resume reading'])) {
         if (!isPlaying) {
             if (articles.length === 0) {
                 void fetchMixedNews().then((loaded) => {
