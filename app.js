@@ -132,6 +132,14 @@ function matchesAny(command, phrases) {
     return phrases.some((phrase) => command.includes(phrase));
 }
 
+function matchesToken(command, token) {
+    return new RegExp(`(?:^|\\s)${token}(?:$|\\s)`).test(command);
+}
+
+function matchesAnyToken(command, tokens) {
+    return tokens.some((token) => matchesToken(command, token));
+}
+
 function getBestRecognitionTranscript(result) {
     if (!result) return '';
 
@@ -145,6 +153,41 @@ function getBestRecognitionTranscript(result) {
 
     const bestAlternative = [...alternatives].sort((left, right) => (right.confidence || 0) - (left.confidence || 0))[0];
     return normalizeText(commandLike?.transcript || bestAlternative?.transcript || '');
+}
+
+function resolveVoiceIntent(command) {
+    const normalized = normalizeText(command);
+    if (!normalized) return null;
+
+    if (matchesAny(normalized, ['turn voice off', 'disable voice commands', 'voice off'])) return 'voice-off';
+    if (matchesAny(normalized, ['turn voice on', 'enable voice commands', 'voice on'])) return 'voice-on';
+
+    if (matchesAny(normalized, ['close command palette', 'close palette', 'close window'])) return 'close-palette';
+    if (matchesAny(normalized, ['open command palette', 'open palette'])) return 'open-palette';
+
+    if (matchesAny(normalized, ['open dashboard', 'go to dashboard', 'show dashboard'])) return 'dashboard';
+    if (matchesAny(normalized, ['open feed', 'go to feed', 'open player', 'show player'])) return 'player';
+    if (matchesAny(normalized, ['open settings', 'go to settings', 'show settings'])) return 'settings';
+    if (matchesAny(normalized, ['open insights', 'go to insights', 'show insights'])) return 'insights';
+
+    if (matchesAny(normalized, ['today news', 'today s news', 'todays news', 'today headline', 'today headlines', 'headlines news', 'headings news', 'headlines', 'daily digest', 'read today s news', 'read today news', 'play today s news', 'play todays news', 'play today news', 'play the news', 'load today s news', 'load todays news', 'load today news', 'start today s news', 'start today news', 'read me the news'])) {
+        return 'today-news';
+    }
+
+    if (matchesAny(normalized, ['mixed digest', 'load mixed', 'mixed news', 'daily brief', 'latest news', 'open news'])) return 'mixed-news';
+
+    if (matchesAny(normalized, ['source '])) return 'source';
+    if (matchesAny(normalized, ['voice '])) return 'voice';
+    if (matchesAny(normalized, ['speed ', 'rate '])) return 'speed';
+
+    if (matchesAny(normalized, ['stop reading', 'stop playback', 'stop speaking', 'stop the news']) || matchesToken(normalized, 'stop')) return 'stop';
+    if (matchesAny(normalized, ['pause reading', 'pause playback', 'pause the news', 'hold on', 'stop for a moment']) || matchesToken(normalized, 'pause')) return 'pause';
+    if (matchesAny(normalized, ['next article', 'next story', 'next news', 'skip ahead', 'next item', 'move next']) || matchesToken(normalized, 'next')) return 'next';
+    if (matchesAny(normalized, ['previous article', 'previous story', 'previous news', 'go back', 'back', 'previous item', 'move back', 'go previous']) || matchesToken(normalized, 'previous') || matchesToken(normalized, 'back')) return 'previous';
+    if (matchesAny(normalized, ['play', 'resume', 'continue', 'start reading', 'read this', 'read current article', 'start the news', 'resume reading'])) return 'play';
+    if (matchesAny(normalized, ['read headlines', 'headline news', 'latest headlines'])) return 'today-news';
+
+    return null;
 }
 
 function shouldProcessVoiceCommand(command) {
@@ -632,60 +675,15 @@ function handleVoiceCommand(rawTranscript) {
 
     if (!command) return;
 
-    if (matchesAny(command, ['help', 'what can i say'])) {
+    if (matchesAnyToken(command, ['help'])) {
         openCommandPalette();
         showToast('Voice commands', 'Try play, pause, next, previous, stop, today\'s news, headlines, source Reuters, voice Samantha, or speed 1.25.');
         return;
     }
 
-    if (matchesAny(command, ['open command palette', 'open palette'])) {
-        openCommandPalette();
-        return;
-    }
-
-    if (matchesAny(command, ['show shortcuts', 'voice help', 'assistant help'])) {
+    if (matchesAny(command, ['show shortcuts', 'voice help', 'assistant help', 'what can i say'])) {
         openCommandPalette();
         showToast('Assistant help', 'Use play, pause, next, previous, stop, today\'s news, source, voice, speed, open dashboard, open feed, or open settings.');
-        return;
-    }
-
-    if (matchesAny(command, ['open dashboard', 'go to dashboard', 'show dashboard'])) return void scrollToSection('dashboard');
-    if (matchesAny(command, ['open feed', 'go to feed', 'open player', 'show player'])) return void scrollToSection('player');
-    if (matchesAny(command, ['open settings', 'go to settings', 'show settings'])) return void scrollToSection('settings');
-    if (matchesAny(command, ['open insights', 'go to insights', 'show insights'])) return void scrollToSection('insights');
-    if (matchesAny(command, ['close command palette', 'close palette', 'close window'])) return void closeCommandPalette();
-
-    if (matchesAny(command, [
-        'today news',
-        'today s news',
-        'todays news',
-        'today headline',
-        'today headlines',
-        'headlines news',
-        'headings news',
-        'headlines',
-        'daily digest',
-        'read today s news',
-        'read today news',
-        'play today s news',
-        'play todays news',
-        'play today news',
-        'play the news',
-        'load today s news',
-        'load todays news',
-        'load today news',
-        'start today s news',
-        'start today news',
-        'read me the news',
-    ])) {
-        void fetchMixedNews().then((loaded) => {
-            if (loaded) playCurrentArticle();
-        });
-        return;
-    }
-
-    if (matchesAny(command, ['mixed digest', 'load mixed', 'mixed news', 'daily brief', 'latest news', 'open news'])) {
-        void fetchMixedNews();
         return;
     }
 
@@ -698,41 +696,45 @@ function handleVoiceCommand(rawTranscript) {
     const speedMatch = command.match(/\b(?:speed|rate)\s+([0-9]+(?:\.[0-9]+)?)/);
     if (speedMatch && setSpeechRate(speedMatch[1])) return;
 
-    if (matchesAny(command, ['faster', 'speed up', 'increase speed', 'louder'])) return void adjustSpeechRate(0.1);
-    if (matchesAny(command, ['slower', 'slow down', 'decrease speed', 'quieter'])) return void adjustSpeechRate(-0.1);
+    const intent = resolveVoiceIntent(command);
 
-    if (matchesAny(command, ['turn voice off', 'disable voice commands', 'voice off'])) {
+    if (intent === 'dashboard') return void scrollToSection('dashboard');
+    if (intent === 'player') return void scrollToSection('player');
+    if (intent === 'settings') return void scrollToSection('settings');
+    if (intent === 'insights') return void scrollToSection('insights');
+    if (intent === 'close-palette') return void closeCommandPalette();
+    if (intent === 'open-palette') return void openCommandPalette();
+    if (intent === 'voice-off') {
         if (voiceCommandsEnabled) stopVoiceCommands();
         return;
     }
-
-    if (matchesAny(command, ['turn voice on', 'enable voice commands', 'voice on'])) {
+    if (intent === 'voice-on') {
         if (!voiceCommandsEnabled) startVoiceCommands();
         return;
     }
-
-    if (matchesAny(command, ['next article', 'next story', 'next news', 'skip ahead', 'next item', 'move next']) || command === 'next' || command.startsWith('next ')) {
-        advanceArticle(1);
+    if (intent === 'today-news' || intent === 'mixed-news') {
+        void fetchMixedNews().then((loaded) => {
+            if (loaded && intent === 'today-news') playCurrentArticle();
+        });
         return;
     }
-
-    if (matchesAny(command, ['previous article', 'previous story', 'previous news', 'go back', 'back', 'previous item', 'move back', 'go previous'])) {
-        advanceArticle(-1);
-        return;
-    }
-
-    if (matchesAny(command, ['pause', 'pause reading', 'pause playback', 'pause the news', 'hold on', 'stop for a moment'])) {
-        if (isPlaying) togglePlayPause();
-        else if (synth.speaking && !synth.paused) togglePlayPause();
-        return;
-    }
-
-    if (matchesAny(command, ['stop reading', 'stop playback', 'stop speaking', 'stop the news', 'stop'])) {
+    if (intent === 'stop') {
         stopReading();
         return;
     }
-
-    if (matchesAny(command, ['play', 'resume', 'continue', 'start reading', 'read this', 'read current article', 'start the news', 'resume reading'])) {
+    if (intent === 'pause') {
+        if (isPlaying || synth.speaking) togglePlayPause();
+        return;
+    }
+    if (intent === 'next') {
+        advanceArticle(1);
+        return;
+    }
+    if (intent === 'previous') {
+        advanceArticle(-1);
+        return;
+    }
+    if (intent === 'play') {
         if (!isPlaying) {
             if (articles.length === 0) {
                 void fetchMixedNews().then((loaded) => {
@@ -744,13 +746,24 @@ function handleVoiceCommand(rawTranscript) {
         }
         return;
     }
-
-    if (matchesAny(command, ['read headlines', 'headline news', 'headlines', 'latest headlines'])) {
-        void fetchMixedNews().then((loaded) => {
-            if (loaded) playCurrentArticle();
-        });
+    if (intent === 'source') {
+        const sourceValue = sourceMatch?.[1];
+        if (sourceValue) setSourceByName(sourceValue);
         return;
     }
+    if (intent === 'voice') {
+        const voiceValue = voiceMatch?.[1];
+        if (voiceValue) setVoiceByName(voiceValue);
+        return;
+    }
+    if (intent === 'speed') {
+        const speedValue = speedMatch?.[1];
+        if (speedValue) setSpeechRate(speedValue);
+        return;
+    }
+
+    if (matchesAny(command, ['faster', 'speed up', 'increase speed', 'louder'])) return void adjustSpeechRate(0.1);
+    if (matchesAny(command, ['slower', 'slow down', 'decrease speed', 'quieter'])) return void adjustSpeechRate(-0.1);
 
     if (matchesAny(command, ['repeat', 'read again'])) {
         if (titleEl?.textContent) showToast('Current story', `${titleEl.textContent}.`);
@@ -772,10 +785,15 @@ function getRecognition() {
     recognition.maxAlternatives = 5;
 
     recognition.onresult = (event) => {
-        const result = event.results[event.results.length - 1];
-        const transcript = getBestRecognitionTranscript(result);
-        if (transcript) {
-            handleVoiceCommand(transcript);
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            if (!result?.isFinal && index !== event.results.length - 1) continue;
+
+            const transcript = getBestRecognitionTranscript(result);
+            if (transcript) {
+                handleVoiceCommand(transcript);
+                break;
+            }
         }
     };
 
