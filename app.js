@@ -125,6 +125,10 @@ function normalizeText(text) {
         .trim();
 }
 
+function matchesAny(command, phrases) {
+    return phrases.some((phrase) => command.includes(phrase));
+}
+
 function applyTheme(isLight) {
     document.body.classList.toggle('light-mode', isLight);
     themeToggle?.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Toggle light mode');
@@ -374,16 +378,19 @@ async function fetchMixedNews() {
             articles = combined;
             loadArticle(0);
             showToast('Mixed digest ready', `${articles.length} stories curated from multiple sources.`);
+            return true;
         } else {
             if (titleEl) titleEl.textContent = 'Error';
             if (contentEl) contentEl.textContent = 'Failed to load any articles. Please try again.';
             showToast('Digest unavailable', 'No stories could be aggregated right now.');
+            return false;
         }
     } catch (error) {
         console.error('Error fetching mixed news:', error);
         if (titleEl) titleEl.textContent = 'Error';
         if (contentEl) contentEl.textContent = 'A network error occurred while aggregating news.';
         showToast('Aggregation failed', 'Please try again in a moment.');
+        return false;
     } finally {
         setLoadingState(false);
     }
@@ -437,6 +444,29 @@ function loadArticle(index) {
     if (progressEl) progressEl.textContent = `Article ${currentArticleIndex + 1} of ${articles.length}`;
 
     stopReading();
+}
+
+function playCurrentArticle() {
+    if (!articles.length) return;
+
+    synth.cancel();
+    const nextUtterance = prepareUtterance();
+    if (!nextUtterance) return;
+
+    synth.speak(nextUtterance);
+    isPlaying = true;
+    updateUI();
+}
+
+function advanceArticle(delta, shouldResumePlayback = isPlaying || synth.speaking) {
+    if (!articles.length) return;
+
+    const resumePlayback = shouldResumePlayback;
+    loadArticle(currentArticleIndex + delta);
+
+    if (resumePlayback) {
+        window.setTimeout(playCurrentArticle, 150);
+    }
 }
 
 function prepareUtterance() {
@@ -559,29 +589,40 @@ function handleVoiceCommand(rawTranscript) {
 
     if (!command) return;
 
-    if (command.includes('help') || command.includes('what can i say')) {
+    if (matchesAny(command, ['help', 'what can i say'])) {
         openCommandPalette();
         showToast('Voice commands', 'Try play, pause, next, previous, stop, mixed digest, source BBC, voice Samantha, or speed 1.25.');
         return;
     }
 
-    if (command.includes('open command palette')) {
+    if (matchesAny(command, ['open command palette', 'open palette'])) {
         openCommandPalette();
         return;
     }
 
-    if (command.includes('show shortcuts') || command.includes('voice help') || command.includes('assistant help')) {
+    if (matchesAny(command, ['show shortcuts', 'voice help', 'assistant help'])) {
         openCommandPalette();
         showToast('Assistant help', 'Use play, pause, next, previous, stop, source, voice, speed, open dashboard, open settings, or mixed digest.');
         return;
     }
 
-    if (command.includes('open dashboard') || command.includes('go to dashboard')) return void scrollToSection('dashboard');
-    if (command.includes('open feed') || command.includes('go to feed') || command.includes('open player')) return void scrollToSection('player');
-    if (command.includes('open settings') || command.includes('go to settings')) return void scrollToSection('settings');
-    if (command.includes('open insights') || command.includes('go to insights')) return void scrollToSection('insights');
-    if (command.includes('close command palette') || command === 'close') return void closeCommandPalette();
-    if (command.includes('mixed digest') || command.includes('load mixed') || command.includes('mixed news')) return void fetchMixedNews();
+    if (matchesAny(command, ['open dashboard', 'go to dashboard'])) return void scrollToSection('dashboard');
+    if (matchesAny(command, ['open feed', 'go to feed', 'open player'])) return void scrollToSection('player');
+    if (matchesAny(command, ['open settings', 'go to settings'])) return void scrollToSection('settings');
+    if (matchesAny(command, ['open insights', 'go to insights'])) return void scrollToSection('insights');
+    if (matchesAny(command, ['close command palette', 'close palette', 'close'])) return void closeCommandPalette();
+
+    if (matchesAny(command, ['today news', 'today s news', 'todays news', 'today headline', 'today headlines', 'headlines news', 'headings news', 'daily digest', 'play todays news', 'play today news', 'load todays news', 'load today news'])) {
+        void fetchMixedNews().then((loaded) => {
+            if (loaded) playCurrentArticle();
+        });
+        return;
+    }
+
+    if (matchesAny(command, ['mixed digest', 'load mixed', 'mixed news'])) {
+        void fetchMixedNews();
+        return;
+    }
 
     const sourceMatch = command.match(/\bsource\s+(.+)$/);
     if (sourceMatch && setSourceByName(sourceMatch[1])) return;
@@ -592,26 +633,44 @@ function handleVoiceCommand(rawTranscript) {
     const speedMatch = command.match(/\b(?:speed|rate)\s+([0-9]+(?:\.[0-9]+)?)/);
     if (speedMatch && setSpeechRate(speedMatch[1])) return;
 
-    if (command.includes('faster') || command.includes('speed up') || command.includes('increase speed')) return void adjustSpeechRate(0.1);
-    if (command.includes('slower') || command.includes('slow down') || command.includes('decrease speed')) return void adjustSpeechRate(-0.1);
+    if (matchesAny(command, ['faster', 'speed up', 'increase speed'])) return void adjustSpeechRate(0.1);
+    if (matchesAny(command, ['slower', 'slow down', 'decrease speed'])) return void adjustSpeechRate(-0.1);
 
-    if (command.includes('next article') || command === 'next' || command.startsWith('next ')) return void btnNext?.click();
-    if (command.includes('previous article') || command.includes('go back') || command === 'previous' || command.startsWith('previous ')) return void btnPrev?.click();
-
-    if (command.includes('play') && !command.includes('pause')) {
-        if (!isPlaying) togglePlayPause();
+    if (matchesAny(command, ['next article', 'next story', 'next news']) || command === 'next' || command.startsWith('next ')) {
+        advanceArticle(1);
         return;
     }
 
-    if (command.includes('pause') || command.includes('stop reading') || command === 'stop') {
-        if (isPlaying || synth.speaking) {
-            if (command.includes('stop')) stopReading();
-            else if (isPlaying) togglePlayPause();
+    if (matchesAny(command, ['previous article', 'previous story', 'previous news', 'go back', 'back']) || command === 'previous' || command.startsWith('previous ')) {
+        advanceArticle(-1);
+        return;
+    }
+
+    if (matchesAny(command, ['pause', 'pause reading', 'pause playback'])) {
+        if (isPlaying) togglePlayPause();
+        else if (synth.speaking && !synth.paused) togglePlayPause();
+        return;
+    }
+
+    if (matchesAny(command, ['stop reading', 'stop playback', 'stop'])) {
+        stopReading();
+        return;
+    }
+
+    if (matchesAny(command, ['play', 'resume', 'continue'])) {
+        if (!isPlaying) {
+            if (articles.length === 0) {
+                void fetchMixedNews().then((loaded) => {
+                    if (loaded) playCurrentArticle();
+                });
+            } else {
+                playCurrentArticle();
+            }
         }
         return;
     }
 
-    if (command.includes('repeat') || command.includes('read again')) {
+    if (matchesAny(command, ['repeat', 'read again'])) {
         if (titleEl?.textContent) showToast('Current story', `${titleEl.textContent}.`);
         if (!isPlaying) togglePlayPause();
         return;
@@ -744,14 +803,10 @@ function setupEventListeners() {
     btnPlayPause?.addEventListener('click', togglePlayPause);
     btnStop?.addEventListener('click', stopReading);
     btnNext?.addEventListener('click', () => {
-        if (articles.length === 0) return;
-        loadArticle(currentArticleIndex + 1);
-        if (isPlaying) togglePlayPause();
+        advanceArticle(1);
     });
     btnPrev?.addEventListener('click', () => {
-        if (articles.length === 0) return;
-        loadArticle(currentArticleIndex - 1);
-        if (isPlaying) togglePlayPause();
+        advanceArticle(-1);
     });
 
     rateRange?.addEventListener('input', () => {
@@ -794,7 +849,7 @@ function setupEventListeners() {
         item.addEventListener('click', () => {
             const action = item.dataset.command;
             if (action === 'play') togglePlayPause();
-            else if (action === 'mixed') fetchMixedNews();
+            else if (action === 'mixed') void fetchMixedNews();
             else if (action === 'source') sourceSelect?.focus();
             else if (action === 'voice') voiceSelect?.focus();
             closeCommandPalette();
@@ -829,7 +884,7 @@ function setupEventListeners() {
     });
 
     sourceSelect?.addEventListener('change', (event) => {
-        if (event.target.value === 'mixed') fetchMixedNews();
+        if (event.target.value === 'mixed') void fetchMixedNews();
         else fetchNews(event.target.value);
     });
 }
