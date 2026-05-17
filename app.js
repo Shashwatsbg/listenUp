@@ -34,6 +34,7 @@ let recognition = null;
 let voiceCommandsEnabled = false;
 let voiceContinuousListening = false;
 let voicePushToTalkActive = false;
+let suppressAutoAdvance = false;
 
 const synth = window.speechSynthesis;
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -443,12 +444,16 @@ function loadArticle(index) {
     if (contentEl) contentEl.textContent = article.content;
     if (progressEl) progressEl.textContent = `Article ${currentArticleIndex + 1} of ${articles.length}`;
 
-    stopReading();
+    suppressAutoAdvance = true;
+    synth.cancel();
+    isPlaying = false;
+    updateUI();
 }
 
 function playCurrentArticle() {
     if (!articles.length) return;
 
+    suppressAutoAdvance = true;
     synth.cancel();
     const nextUtterance = prepareUtterance();
     if (!nextUtterance) return;
@@ -482,11 +487,16 @@ function prepareUtterance() {
     utterance.rate = Number.parseFloat(rateRange?.value || '1');
 
     utterance.onend = () => {
+        if (suppressAutoAdvance) {
+            suppressAutoAdvance = false;
+            return;
+        }
+
         isPlaying = false;
         updateUI();
         if (currentArticleIndex < articles.length - 1) {
             loadArticle(currentArticleIndex + 1);
-            window.setTimeout(() => togglePlayPause(), 400);
+            window.setTimeout(playCurrentArticle, 400);
         }
     };
 
@@ -531,6 +541,7 @@ function togglePlayPause() {
 }
 
 function stopReading() {
+    suppressAutoAdvance = true;
     synth.cancel();
     isPlaying = false;
     updateUI();
