@@ -7,9 +7,9 @@
     --border-color: #555555;
     --btn-bg: #222222;
     --btn-hover: #444444;
-    --btn-primary: #FFFFFF;
+    --btn-primary: #00FF00;
     --btn-primary-text: #000000;
-    --btn-primary-hover: #DDDDDD;
+    --btn-primary-hover: #00CC00;
     --btn-danger: #FF0000;
     --btn-danger-text: #FFFFFF;
     --focus-ring: 4px solid var(--accent-color);
