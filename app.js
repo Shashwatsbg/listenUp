@@ -591,7 +591,7 @@ function handleVoiceCommand(rawTranscript) {
 
     if (matchesAny(command, ['help', 'what can i say'])) {
         openCommandPalette();
-        showToast('Voice commands', 'Try play, pause, next, previous, stop, mixed digest, source BBC, voice Samantha, or speed 1.25.');
+        showToast('Voice commands', 'Try play, pause, next, previous, stop, today\'s news, headlines, source Reuters, voice Samantha, or speed 1.25.');
         return;
     }
 
@@ -602,24 +602,24 @@ function handleVoiceCommand(rawTranscript) {
 
     if (matchesAny(command, ['show shortcuts', 'voice help', 'assistant help'])) {
         openCommandPalette();
-        showToast('Assistant help', 'Use play, pause, next, previous, stop, source, voice, speed, open dashboard, open settings, or mixed digest.');
+        showToast('Assistant help', 'Use play, pause, next, previous, stop, today\'s news, source, voice, speed, open dashboard, open feed, or open settings.');
         return;
     }
 
-    if (matchesAny(command, ['open dashboard', 'go to dashboard'])) return void scrollToSection('dashboard');
-    if (matchesAny(command, ['open feed', 'go to feed', 'open player'])) return void scrollToSection('player');
-    if (matchesAny(command, ['open settings', 'go to settings'])) return void scrollToSection('settings');
-    if (matchesAny(command, ['open insights', 'go to insights'])) return void scrollToSection('insights');
-    if (matchesAny(command, ['close command palette', 'close palette', 'close'])) return void closeCommandPalette();
+    if (matchesAny(command, ['open dashboard', 'go to dashboard', 'show dashboard'])) return void scrollToSection('dashboard');
+    if (matchesAny(command, ['open feed', 'go to feed', 'open player', 'show player'])) return void scrollToSection('player');
+    if (matchesAny(command, ['open settings', 'go to settings', 'show settings'])) return void scrollToSection('settings');
+    if (matchesAny(command, ['open insights', 'go to insights', 'show insights'])) return void scrollToSection('insights');
+    if (matchesAny(command, ['close command palette', 'close palette', 'close window'])) return void closeCommandPalette();
 
-    if (matchesAny(command, ['today news', 'today s news', 'todays news', 'today headline', 'today headlines', 'headlines news', 'headings news', 'daily digest', 'play todays news', 'play today news', 'load todays news', 'load today news'])) {
+    if (matchesAny(command, ['today news', 'today s news', 'todays news', 'today headline', 'today headlines', 'headlines news', 'headings news', 'headlines', 'daily digest', 'read today s news', 'play todays news', 'play today news', 'load todays news', 'load today news'])) {
         void fetchMixedNews().then((loaded) => {
             if (loaded) playCurrentArticle();
         });
         return;
     }
 
-    if (matchesAny(command, ['mixed digest', 'load mixed', 'mixed news'])) {
+    if (matchesAny(command, ['mixed digest', 'load mixed', 'mixed news', 'daily brief'])) {
         void fetchMixedNews();
         return;
     }
@@ -633,31 +633,41 @@ function handleVoiceCommand(rawTranscript) {
     const speedMatch = command.match(/\b(?:speed|rate)\s+([0-9]+(?:\.[0-9]+)?)/);
     if (speedMatch && setSpeechRate(speedMatch[1])) return;
 
-    if (matchesAny(command, ['faster', 'speed up', 'increase speed'])) return void adjustSpeechRate(0.1);
-    if (matchesAny(command, ['slower', 'slow down', 'decrease speed'])) return void adjustSpeechRate(-0.1);
+    if (matchesAny(command, ['faster', 'speed up', 'increase speed', 'louder'])) return void adjustSpeechRate(0.1);
+    if (matchesAny(command, ['slower', 'slow down', 'decrease speed', 'quieter'])) return void adjustSpeechRate(-0.1);
 
-    if (matchesAny(command, ['next article', 'next story', 'next news']) || command === 'next' || command.startsWith('next ')) {
+    if (matchesAny(command, ['turn voice off', 'disable voice commands', 'voice off'])) {
+        if (voiceCommandsEnabled) stopVoiceCommands();
+        return;
+    }
+
+    if (matchesAny(command, ['turn voice on', 'enable voice commands', 'voice on'])) {
+        if (!voiceCommandsEnabled) startVoiceCommands();
+        return;
+    }
+
+    if (matchesAny(command, ['next article', 'next story', 'next news', 'skip ahead']) || command === 'next' || command.startsWith('next ')) {
         advanceArticle(1);
         return;
     }
 
-    if (matchesAny(command, ['previous article', 'previous story', 'previous news', 'go back', 'back']) || command === 'previous' || command.startsWith('previous ')) {
+    if (matchesAny(command, ['previous article', 'previous story', 'previous news', 'go back', 'back', 'previous item']) || command === 'previous' || command.startsWith('previous ')) {
         advanceArticle(-1);
         return;
     }
 
-    if (matchesAny(command, ['pause', 'pause reading', 'pause playback'])) {
+    if (matchesAny(command, ['pause', 'pause reading', 'pause playback', 'hold on'])) {
         if (isPlaying) togglePlayPause();
         else if (synth.speaking && !synth.paused) togglePlayPause();
         return;
     }
 
-    if (matchesAny(command, ['stop reading', 'stop playback', 'stop'])) {
+    if (matchesAny(command, ['stop reading', 'stop playback', 'stop speaking', 'stop'])) {
         stopReading();
         return;
     }
 
-    if (matchesAny(command, ['play', 'resume', 'continue'])) {
+    if (matchesAny(command, ['play', 'resume', 'continue', 'start reading', 'read this', 'read current article'])) {
         if (!isPlaying) {
             if (articles.length === 0) {
                 void fetchMixedNews().then((loaded) => {
@@ -667,6 +677,13 @@ function handleVoiceCommand(rawTranscript) {
                 playCurrentArticle();
             }
         }
+        return;
+    }
+
+    if (matchesAny(command, ['read headlines', 'headline news', 'headlines', 'latest headlines'])) {
+        void fetchMixedNews().then((loaded) => {
+            if (loaded) playCurrentArticle();
+        });
         return;
     }
 
