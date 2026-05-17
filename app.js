@@ -1,23 +1,20 @@
-// Mock AI Curated News Articles
-const articles = [
-    {
-        title: "New AI Breakthrough in Accessibility",
-        content: "Researchers have announced a new artificial intelligence system designed to provide real-time audio descriptions of the environment for the visually impaired. Early tests show remarkable accuracy and speed, potentially replacing traditional navigation aids."
-    },
-    {
-        title: "Global Tech Summit 2026 Focuses on Inclusion",
-        content: "At the 2026 Global Tech Summit in Geneva, keynotes heavily emphasized making technology accessible to everyone. Major companies pledged new resources to develop advanced screen readers, tactile feedback devices, and affordable braille displays."
-    },
-    {
-        title: "Weather Update: Sunny Skies Expected All Week",
-        content: "For those planning outdoor activities, you are in luck. Meteorologists predict clear, sunny skies and mild temperatures for the entire week across the region. No rain is expected until at least next Monday."
-    },
-    {
-        title: "Local Library Expands Audio Book Collection",
-        content: "The City Library has just added over ten thousand new titles to its free audio book collection. The new additions focus heavily on classic literature, modern science fiction, and educational podcasts."
-    }
+// News Sources Configuration
+const newsSources = [
+    { id: 'bbc', name: 'BBC News', rss: 'http://feeds.bbci.co.uk/news/rss.xml' },
+    { id: 'cnn', name: 'CNN Top Stories', rss: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
+    { id: 'nyt', name: 'New York Times', rss: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
+    { id: 'bloomberg', name: 'Bloomberg', rss: 'https://feeds.bloomberg.com/markets/news.rss' },
+    { id: 'fp', name: 'Foreign Policy', rss: 'https://foreignpolicy.com/feed/' },
+    { id: 'bs', name: 'Business Standard', rss: 'https://www.business-standard.com/rss/home_page_top_stories.rss' },
+    { id: 'wion', name: 'WION', rss: 'https://www.wionews.com/feeds/wion-world.rss' },
+    { id: 'aajtak', name: 'AajTak', rss: 'https://feed.aajtak.in/rss/1471018/rss.xml' },
+    { id: 'rt', name: 'Russia Today', rss: 'https://www.rt.com/rss/news/' },
+    { id: 'gt', name: 'Global Times', rss: 'https://www.globaltimes.cn/rss/rss.xml' },
+    { id: 'sputnik', name: 'Sputnik', rss: 'https://sputniknews.com/export/pool/custom_all/' },
+    { id: 'france24', name: 'France 24', rss: 'https://www.france24.com/en/rss' }
 ];
 
+let articles = [];
 let currentArticleIndex = 0;
 let synth = window.speechSynthesis;
 let utterance = null;
@@ -35,6 +32,7 @@ const playPauseText = document.getElementById('play-pause-text');
 const btnNext = document.getElementById('btn-next');
 const btnPrev = document.getElementById('btn-prev');
 const btnStop = document.getElementById('btn-stop');
+const sourceSelect = document.getElementById('source-select');
 const voiceSelect = document.getElementById('voice-select');
 const rateRange = document.getElementById('rate-range');
 const rateValue = document.getElementById('rate-value');
@@ -62,7 +60,60 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
+// Initialize News Sources
+function populateSourceList() {
+    sourceSelect.innerHTML = '';
+    newsSources.forEach(source => {
+        const option = document.createElement('option');
+        option.value = source.rss;
+        option.textContent = source.name;
+        sourceSelect.appendChild(option);
+    });
+}
+populateSourceList();
+
+async function fetchNews(rssUrl) {
+    stopReading();
+    titleEl.textContent = 'Loading News...';
+    contentEl.textContent = 'Please wait while we fetch the latest articles.';
+    progressEl.textContent = '';
+    articles = [];
+    currentArticleIndex = 0;
+
+    try {
+        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
+        const data = await response.json();
+        
+        if (data.status === 'ok' && data.items.length > 0) {
+            articles = data.items.map(item => {
+                // Strip HTML from description
+                const tmp = document.createElement("DIV");
+                tmp.innerHTML = item.description || item.content || '';
+                const cleanContent = tmp.textContent || tmp.innerText || "";
+                
+                return {
+                    title: item.title,
+                    content: cleanContent
+                };
+            });
+            loadArticle(0);
+        } else {
+            titleEl.textContent = 'Error';
+            contentEl.textContent = 'Failed to load news articles. Please try another source.';
+        }
+    } catch (error) {
+        console.error("Error fetching news:", error);
+        titleEl.textContent = 'Error';
+        contentEl.textContent = 'A network error occurred. Please try another source.';
+    }
+}
+
+sourceSelect.addEventListener('change', (e) => {
+    fetchNews(e.target.value);
+});
+
 function loadArticle(index) {
+    if (articles.length === 0) return;
     if (index < 0) index = 0;
     if (index >= articles.length) index = articles.length - 1;
     
@@ -77,6 +128,7 @@ function loadArticle(index) {
 }
 
 function prepareUtterance() {
+    if (articles.length === 0) return;
     const article = articles[currentArticleIndex];
     const textToRead = `${article.title}. ${article.content}`;
     
@@ -180,4 +232,4 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Initial load
-loadArticle(0);
+fetchNews(newsSources[0].rss);
