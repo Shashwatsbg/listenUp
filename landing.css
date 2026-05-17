@@ -1,10 +1,10 @@
 :root {
-    --bg-dark: #0a0a0c;
+    --bg-dark: #000000;
     --text-primary: #ffffff;
     --text-secondary: #a0a0ab;
-    --accent-glow: rgba(0, 255, 255, 0.4);
-    --gradient-start: #00ffff;
-    --gradient-end: #ff00ff;
+    --accent-glow: rgba(255, 255, 255, 0.4);
+    --gradient-start: #ffffff;
+    --gradient-end: #888888;
     --card-bg: rgba(255, 255, 255, 0.03);
     --card-border: rgba(255, 255, 255, 0.08);
 }
@@ -144,7 +144,7 @@ main {
 
 .primary-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(0, 255, 255, 0.2);
+    box-shadow: 0 10px 20px rgba(255, 255, 255, 0.2);
 }
 
 .arrow {

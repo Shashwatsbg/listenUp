@@ -1,15 +1,15 @@
 :root {
     /* High contrast dark theme variables */
     --bg-color: #000000;
-    --text-color: #FFFF00; /* Bright yellow for maximum contrast */
-    --text-secondary: #FFFFFF;
-    --accent-color: #00FFFF; /* Cyan for interactive elements */
+    --text-color: #FFFFFF; /* White for maximum contrast */
+    --text-secondary: #CCCCCC;
+    --accent-color: #FFFFFF; /* White for interactive elements */
     --border-color: #555555;
     --btn-bg: #222222;
     --btn-hover: #444444;
-    --btn-primary: #FFFF00;
+    --btn-primary: #FFFFFF;
     --btn-primary-text: #000000;
-    --btn-primary-hover: #CCCC00;
+    --btn-primary-hover: #DDDDDD;
     --btn-danger: #FF0000;
     --btn-danger-text: #FFFFFF;
     --focus-ring: 4px solid var(--accent-color);
