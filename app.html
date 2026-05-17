@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>listenUp - Audio News</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts for readable typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header role="banner">
+        <h1>listenUp</h1>
+        <p class="subtitle" aria-live="polite">Daily AI curated news, accessible to everyone.</p>
+    </header>
+
+    <main role="main">
+        <section aria-label="Controls" class="controls-panel">
+            <button id="btn-prev" aria-label="Previous Article">
+                <span class="icon" aria-hidden="true">⏮</span> Previous
+            </button>
+            <button id="btn-play-pause" aria-label="Play News" class="primary-btn">
+                <span class="icon" aria-hidden="true" id="play-pause-icon">▶</span> <span id="play-pause-text">Play</span>
+            </button>
+            <button id="btn-next" aria-label="Next Article">
+                <span class="icon" aria-hidden="true">⏭</span> Next
+            </button>
+            <button id="btn-stop" aria-label="Stop Reading" class="danger-btn">
+                <span class="icon" aria-hidden="true">⏹</span> Stop
+            </button>
+        </section>
+
+        <section aria-label="Current Article" class="article-display" id="article-display">
+            <h2 id="article-title" aria-live="polite">Ready to Read</h2>
+            <p id="article-content" aria-live="polite">Press Play to start reading your daily news feed.</p>
+            <div class="status-bar">
+                <p id="status-text" aria-live="assertive">Status: Paused</p>
+                <p id="article-progress">Article 0 of 0</p>
+            </div>
+        </section>
+        
+        <section aria-label="Settings" class="settings-panel">
+             <h3>Speech Settings</h3>
+             <div class="setting-group">
+                 <label for="voice-select">Voice:</label>
+                 <select id="voice-select"></select>
+             </div>
+             <div class="setting-group">
+                 <label for="rate-range">Speed:</label>
+                 <input type="range" id="rate-range" min="0.5" max="2" value="1" step="0.1" aria-label="Speech Speed">
+                 <span id="rate-value" aria-hidden="true">1x</span>
+             </div>
+        </section>
+    </main>
+
+    <footer role="contentinfo">
+        <p>Use Tab to navigate. Enter to activate buttons.</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

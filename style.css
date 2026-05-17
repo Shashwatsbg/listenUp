@@ -1,0 +1,205 @@
+:root {
+    /* High contrast dark theme variables */
+    --bg-color: #000000;
+    --text-color: #FFFF00; /* Bright yellow for maximum contrast */
+    --text-secondary: #FFFFFF;
+    --accent-color: #00FFFF; /* Cyan for interactive elements */
+    --border-color: #555555;
+    --btn-bg: #222222;
+    --btn-hover: #444444;
+    --btn-primary: #FFFF00;
+    --btn-primary-text: #000000;
+    --btn-primary-hover: #CCCC00;
+    --btn-danger: #FF0000;
+    --btn-danger-text: #FFFFFF;
+    --focus-ring: 4px solid var(--accent-color);
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Inter', sans-serif;
+    font-size: 1.5rem; /* Large base font size */
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+header {
+    text-align: center;
+    padding: 2rem 1rem;
+    width: 100%;
+    border-bottom: 2px solid var(--border-color);
+}
+
+h1 {
+    font-size: 3rem;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-secondary);
+}
+
+.subtitle {
+    font-size: 1.5rem;
+    margin: 0;
+    font-weight: bold;
+}
+
+main {
+    width: 100%;
+    max-width: 900px;
+    padding: 2rem 1rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* Controls Panel */
+.controls-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+}
+
+button {
+    background-color: var(--btn-bg);
+    color: var(--text-color);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    font-size: 1.5rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+    background-color: var(--btn-hover);
+    border-color: var(--text-color);
+}
+
+button:focus {
+    outline: none;
+    box-shadow: 0 0 0 var(--focus-ring);
+    border-color: var(--accent-color);
+}
+
+.primary-btn {
+    background-color: var(--btn-primary);
+    color: var(--btn-primary-text);
+    border-color: var(--btn-primary);
+    font-size: 1.8rem;
+    padding: 1.2rem 2rem;
+}
+
+.primary-btn:hover {
+    background-color: var(--btn-primary-hover);
+    border-color: var(--btn-primary-hover);
+}
+
+.danger-btn {
+    background-color: var(--btn-bg);
+    color: var(--btn-danger);
+    border-color: var(--btn-danger);
+}
+
+.danger-btn:hover {
+    background-color: var(--btn-danger);
+    color: var(--btn-danger-text);
+}
+
+.icon {
+    font-size: 1.5em;
+}
+
+/* Article Display */
+.article-display {
+    background-color: #111111;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 2rem;
+}
+
+h2 {
+    font-size: 2.5rem;
+    margin-top: 0;
+    color: var(--text-secondary);
+}
+
+#article-content {
+    font-size: 1.8rem;
+}
+
+.status-bar {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    color: var(--accent-color);
+    font-weight: bold;
+}
+
+/* Settings Panel */
+.settings-panel {
+    background-color: #111111;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.setting-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+label {
+    font-weight: bold;
+}
+
+select, input[type="range"] {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    border: 2px solid var(--border-color);
+    padding: 0.5rem;
+    font-size: 1.2rem;
+    border-radius: 4px;
+}
+
+select:focus, input[type="range"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 var(--focus-ring);
+}
+
+footer {
+    margin-top: auto;
+    padding: 1rem;
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+    width: 100%;
+    color: var(--text-secondary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    button {
+        width: 100%;
+        justify-content: center;
+    }
+    .status-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
