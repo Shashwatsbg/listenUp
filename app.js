@@ -35,6 +35,8 @@ let voiceCommandsEnabled = false;
 let voiceContinuousListening = false;
 let voicePushToTalkActive = false;
 let suppressAutoAdvance = false;
+let lastVoiceCommandSignature = '';
+let lastVoiceCommandAt = 0;
 
 const synth = window.speechSynthesis;
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -128,6 +130,35 @@ function normalizeText(text) {
 
 function matchesAny(command, phrases) {
     return phrases.some((phrase) => command.includes(phrase));
+}
+
+function getBestRecognitionTranscript(result) {
+    if (!result) return '';
+
+    const alternatives = Array.from(result || []);
+    if (alternatives.length === 0) return '';
+
+    const commandLike = alternatives.find((alternative) => {
+        const transcript = normalizeText(alternative?.transcript || '');
+        return /^(play|pause|stop|next|previous|today|headlines|mixed|source|voice)\b/.test(transcript);
+    });
+
+    const bestAlternative = [...alternatives].sort((left, right) => (right.confidence || 0) - (left.confidence || 0))[0];
+    return normalizeText(commandLike?.transcript || bestAlternative?.transcript || '');
+}
+
+function shouldProcessVoiceCommand(command) {
+    const signature = normalizeText(command);
+    if (!signature) return false;
+
+    const now = Date.now();
+    if (signature === lastVoiceCommandSignature && now - lastVoiceCommandAt < 1200) {
+        return false;
+    }
+
+    lastVoiceCommandSignature = signature;
+    lastVoiceCommandAt = now;
+    return true;
 }
 
 function applyTheme(isLight) {
@@ -595,6 +626,7 @@ function setSpeechRate(rateText) {
 
 function handleVoiceCommand(rawTranscript) {
     const command = normalizeText(rawTranscript);
+    if (!shouldProcessVoiceCommand(command)) return;
     if (voiceTranscript) voiceTranscript.textContent = rawTranscript || 'No voice command yet.';
     pushVoiceLog('Heard', rawTranscript || '');
 
@@ -737,12 +769,14 @@ function getRecognition() {
     recognition.lang = 'en-US';
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 5;
 
     recognition.onresult = (event) => {
         const result = event.results[event.results.length - 1];
-        const transcript = result?.[0]?.transcript || '';
-        handleVoiceCommand(transcript);
+        const transcript = getBestRecognitionTranscript(result);
+        if (transcript) {
+            handleVoiceCommand(transcript);
+        }
     };
 
     recognition.onerror = (event) => {
