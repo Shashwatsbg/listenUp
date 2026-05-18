@@ -37,6 +37,12 @@ let voicePushToTalkActive = false;
 let suppressAutoAdvance = false;
 let lastVoiceCommandSignature = '';
 let lastVoiceCommandAt = 0;
+let suppressSpeechErrorToast = false;
+
+function markIntentionalCancel() {
+    suppressSpeechErrorToast = true;
+    window.setTimeout(() => { suppressSpeechErrorToast = false; }, 800);
+}
 
 const synth = window.speechSynthesis;
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -148,7 +154,7 @@ function getBestRecognitionTranscript(result) {
 
     const commandLike = alternatives.find((alternative) => {
         const transcript = normalizeText(alternative?.transcript || '');
-        return /^(play|pause|stop|next|previous|today|headlines|mixed|source|voice)\b/.test(transcript);
+        return /^(play|pause|stop|next|previous|today|headlines|mixed|source|voice|help|speed|rate|open|turn)\b/.test(transcript);
     });
 
     const bestAlternative = [...alternatives].sort((left, right) => (right.confidence || 0) - (left.confidence || 0))[0];
@@ -190,8 +196,18 @@ function resolveVoiceIntent(command) {
     return null;
 }
 
-function shouldProcessVoiceCommand(command) {
+const PARAMETERIZED_INTENTS = new Set(['source', 'voice', 'speed']);
+const INTERIM_INTENT_ALLOWLIST = new Set(['pause', 'stop', 'next', 'previous']);
+
+function getVoiceCommandSignature(command, intent = '') {
     const signature = normalizeText(command);
+    if (!signature) return '';
+    if (intent && !PARAMETERIZED_INTENTS.has(intent)) return `intent:${intent}`;
+    return signature;
+}
+
+function shouldProcessVoiceCommand(command, intent = '') {
+    const signature = getVoiceCommandSignature(command, intent);
     if (!signature) return false;
 
     const now = Date.now();
@@ -337,6 +353,59 @@ function populateVoiceList() {
         option.setAttribute('data-name', voice.name);
         voiceSelect.appendChild(option);
     });
+}
+
+function speakIntro(doneCallback) {
+    if (!synth) {
+        if (typeof doneCallback === 'function') doneCallback();
+        return;
+    }
+
+    const introText = 'Welcome to ListenUp. Press space to play or pause. Say help to learn voice commands.';
+
+    const speakNow = () => {
+        const introUtterance = new SpeechSynthesisUtterance(introText);
+        introUtterance.lang = 'en-US';
+        const englishVoice = voices.find((v) => v.lang && v.lang.startsWith('en'));
+        if (englishVoice) introUtterance.voice = englishVoice;
+        introUtterance.rate = 1;
+
+        introUtterance.onend = () => {
+            if (typeof doneCallback === 'function') doneCallback();
+        };
+
+        introUtterance.onerror = () => {
+            if (typeof doneCallback === 'function') doneCallback();
+        };
+
+        try {
+            // Do not call cancel here; we want the intro to play uninterrupted.
+            synth.speak(introUtterance);
+        } catch (err) {
+            console.warn('Intro speech failed:', err);
+            if (typeof doneCallback === 'function') doneCallback();
+        }
+    };
+
+    // If voices are available, speak immediately, otherwise wait for voiceschanged.
+    if (voices && voices.length > 0) speakNow();
+    else if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {
+        const handler = () => {
+            populateVoiceList();
+            speakNow();
+            window.speechSynthesis.onvoiceschanged = null;
+        };
+        window.speechSynthesis.onvoiceschanged = handler;
+    } else {
+        // Fallback: speak after a short delay then call callback
+        window.setTimeout(() => {
+            try {
+                speakNow();
+            } catch (err) {
+                if (typeof doneCallback === 'function') doneCallback();
+            }
+        }, 600);
+    }
 }
 
 function populateSourceList() {
@@ -519,6 +588,7 @@ function loadArticle(index) {
     if (progressEl) progressEl.textContent = `Article ${currentArticleIndex + 1} of ${articles.length}`;
 
     suppressAutoAdvance = true;
+    markIntentionalCancel();
     synth.cancel();
     isPlaying = false;
     updateUI();
@@ -528,11 +598,24 @@ function playCurrentArticle() {
     if (!articles.length) return;
 
     suppressAutoAdvance = true;
+    markIntentionalCancel();
     synth.cancel();
     const nextUtterance = prepareUtterance();
     if (!nextUtterance) return;
 
-    synth.speak(nextUtterance);
+    try {
+        synth.speak(nextUtterance);
+    } catch (err) {
+        console.error('synth.speak failed, retrying after cancel:', err);
+        try {
+            markIntentionalCancel();
+            synth.cancel();
+            window.setTimeout(() => synth.speak(nextUtterance), 120);
+        } catch (err2) {
+            console.error('Retry speak failed:', err2);
+            showToast('Speech playback error', 'Unable to start speech.');
+        }
+    }
     isPlaying = true;
     updateUI();
 }
@@ -578,7 +661,14 @@ function prepareUtterance() {
         console.error('SpeechSynthesis error:', event);
         isPlaying = false;
         updateUI();
-        showToast('Speech playback error', 'Try another voice or source.');
+        // Suppress toast for intentional cancels which trigger 'interrupted'
+        if (event?.error === 'interrupted' && suppressSpeechErrorToast) {
+            suppressSpeechErrorToast = false;
+            return;
+        }
+
+        const errMsg = event?.error ? `Error: ${event.error}` : 'Unknown speech error';
+        showToast('Speech playback error', `${errMsg}. Try another voice or source.`);
     };
 
     return utterance;
@@ -606,7 +696,19 @@ function togglePlayPause() {
     } else {
         const nextUtterance = prepareUtterance();
         if (!nextUtterance) return;
-        synth.speak(nextUtterance);
+        try {
+            synth.speak(nextUtterance);
+        } catch (err) {
+            console.error('synth.speak failed (toggle), retrying:', err);
+            try {
+                markIntentionalCancel();
+                synth.cancel();
+                window.setTimeout(() => synth.speak(nextUtterance), 120);
+            } catch (err2) {
+                console.error('Retry speak failed (toggle):', err2);
+                showToast('Speech playback error', 'Unable to start speech.');
+            }
+        }
         isPlaying = true;
     }
 
@@ -616,6 +718,7 @@ function togglePlayPause() {
 
 function stopReading() {
     suppressAutoAdvance = true;
+    markIntentionalCancel();
     synth.cancel();
     isPlaying = false;
     updateUI();
@@ -669,11 +772,13 @@ function setSpeechRate(rateText) {
 
 function handleVoiceCommand(rawTranscript) {
     const command = normalizeText(rawTranscript);
-    if (!shouldProcessVoiceCommand(command)) return;
     if (voiceTranscript) voiceTranscript.textContent = rawTranscript || 'No voice command yet.';
     pushVoiceLog('Heard', rawTranscript || '');
 
     if (!command) return;
+
+    const intent = resolveVoiceIntent(command);
+    if (!shouldProcessVoiceCommand(command, intent)) return;
 
     if (matchesAnyToken(command, ['help'])) {
         openCommandPalette();
@@ -695,8 +800,6 @@ function handleVoiceCommand(rawTranscript) {
 
     const speedMatch = command.match(/\b(?:speed|rate)\s+([0-9]+(?:\.[0-9]+)?)/);
     if (speedMatch && setSpeechRate(speedMatch[1])) return;
-
-    const intent = resolveVoiceIntent(command);
 
     if (intent === 'dashboard') return void scrollToSection('dashboard');
     if (intent === 'player') return void scrollToSection('player');
@@ -781,16 +884,28 @@ function getRecognition() {
     recognition = new SpeechRecognitionAPI();
     recognition.lang = 'en-US';
     recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 5;
+    // Enable interim results so we can react faster to short commands
+    recognition.interimResults = true;
+    // Fewer alternatives is usually faster and sufficient for commands
+    recognition.maxAlternatives = 3;
 
     recognition.onresult = (event) => {
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
             const result = event.results[index];
-            if (!result?.isFinal && index !== event.results.length - 1) continue;
-
             const transcript = getBestRecognitionTranscript(result);
-            if (transcript) {
+            if (!transcript) continue;
+
+            const intent = resolveVoiceIntent(transcript);
+
+            // If the result is final, handle it immediately.
+            if (result.isFinal) {
+                handleVoiceCommand(transcript);
+                break;
+            }
+
+            // For interim results, if the transcript begins with a command verb,
+            // process it immediately to reduce perceived latency.
+            if (intent && INTERIM_INTENT_ALLOWLIST.has(intent)) {
                 handleVoiceCommand(transcript);
                 break;
             }
@@ -1032,8 +1147,10 @@ function init() {
         window.setTimeout(openOnboarding, 350);
     }
 
-    // Load content immediately so playback has something to read.
-    fetchMixedNews();
+    // Load content after intro so speech isn't cancelled by fetch.
+    speakIntro(() => {
+        fetchMixedNews();
+    });
 }
 
 init();
