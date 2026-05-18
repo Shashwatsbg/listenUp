@@ -154,7 +154,7 @@ function getBestRecognitionTranscript(result) {
 
     const commandLike = alternatives.find((alternative) => {
         const transcript = normalizeText(alternative?.transcript || '');
-        return /^(play|pause|stop|next|previous|today|headlines|mixed|source|voice)\b/.test(transcript);
+        return /^(play|pause|stop|next|previous|today|headlines|mixed|source|voice|help|speed|rate|open|turn)\b/.test(transcript);
     });
 
     const bestAlternative = [...alternatives].sort((left, right) => (right.confidence || 0) - (left.confidence || 0))[0];
@@ -196,8 +196,18 @@ function resolveVoiceIntent(command) {
     return null;
 }
 
-function shouldProcessVoiceCommand(command) {
+const PARAMETERIZED_INTENTS = new Set(['source', 'voice', 'speed']);
+const INTERIM_INTENT_ALLOWLIST = new Set(['pause', 'stop', 'next', 'previous']);
+
+function getVoiceCommandSignature(command, intent = '') {
     const signature = normalizeText(command);
+    if (!signature) return '';
+    if (intent && !PARAMETERIZED_INTENTS.has(intent)) return `intent:${intent}`;
+    return signature;
+}
+
+function shouldProcessVoiceCommand(command, intent = '') {
+    const signature = getVoiceCommandSignature(command, intent);
     if (!signature) return false;
 
     const now = Date.now();
@@ -762,11 +772,13 @@ function setSpeechRate(rateText) {
 
 function handleVoiceCommand(rawTranscript) {
     const command = normalizeText(rawTranscript);
-    if (!shouldProcessVoiceCommand(command)) return;
     if (voiceTranscript) voiceTranscript.textContent = rawTranscript || 'No voice command yet.';
     pushVoiceLog('Heard', rawTranscript || '');
 
     if (!command) return;
+
+    const intent = resolveVoiceIntent(command);
+    if (!shouldProcessVoiceCommand(command, intent)) return;
 
     if (matchesAnyToken(command, ['help'])) {
         openCommandPalette();
@@ -788,8 +800,6 @@ function handleVoiceCommand(rawTranscript) {
 
     const speedMatch = command.match(/\b(?:speed|rate)\s+([0-9]+(?:\.[0-9]+)?)/);
     if (speedMatch && setSpeechRate(speedMatch[1])) return;
-
-    const intent = resolveVoiceIntent(command);
 
     if (intent === 'dashboard') return void scrollToSection('dashboard');
     if (intent === 'player') return void scrollToSection('player');
@@ -885,6 +895,8 @@ function getRecognition() {
             const transcript = getBestRecognitionTranscript(result);
             if (!transcript) continue;
 
+            const intent = resolveVoiceIntent(transcript);
+
             // If the result is final, handle it immediately.
             if (result.isFinal) {
                 handleVoiceCommand(transcript);
@@ -893,7 +905,7 @@ function getRecognition() {
 
             // For interim results, if the transcript begins with a command verb,
             // process it immediately to reduce perceived latency.
-            if (/^(play|pause|stop|next|previous|source|voice|speed|help|today|mixed|headlines)\b/.test(transcript)) {
+            if (intent && INTERIM_INTENT_ALLOWLIST.has(intent)) {
                 handleVoiceCommand(transcript);
                 break;
             }
